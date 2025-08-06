@@ -6,7 +6,7 @@ from cartpole import CartPoleEnv, CartPoleParams
 from matplotlib.animation import FuncAnimation
 from pynput.keyboard import Key, Listener, Controller 
 from pynput import keyboard
-from agent import ActorCritic
+from network import ActorCritic
 
 def on_press(key, injected):
     global action

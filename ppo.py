@@ -201,7 +201,8 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                             )
                             * gae
                         )
-                        loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
+                        # loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
+                        loss_actor = -(ratio * gae - jnp.abs(gae) * jnp.square(ratio - 1.0)/(2.0 * ppo_params.CLIP_EPS)) # Simple Policy Optimization
                         loss_actor = loss_actor.mean()
                         entropy = pi.entropy().mean()
 

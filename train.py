@@ -1,4 +1,4 @@
-from agent import ActorCritic
+from network import ActorCritic
 from ppo import make_train, PPOParams
 from cartpole import CartPoleEnv, CartPoleParams
 
@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 from animate_cartpole import plot
 
-jax.default_device(jax.devices('cpu')[0])
+jax.default_device(jax.devices('cuda')[0])
 init(autoreset=True)
 
 def test(network_params):
