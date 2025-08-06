@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
-import numpy as np
 import optax
 from flax.struct import dataclass
 from flax.training.train_state import TrainState
@@ -20,6 +19,7 @@ class PPOParams:
     GAMMA: float = 0.99
     GAE_LAMBDA: float = 0.95
     CLIP_EPS: float = 0.2
+    CLIP_VALUE: float = 0.5
     ENT_COEF: float = 0.0
     VF_COEF: float = 0.5
     MAX_GRAD_NORM: float = 0.5
@@ -45,18 +45,14 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
     assert (
         params.NUM_AGENTS * params.NUM_STEPS % params.NUM_MINIBATCHES == 0
     ), "Number of agents * number of steps must be divisible by number of minibatches"
-    # params.NUM_UPDATES = int(
-    #     params.TOTAL_TIMESTEPS // params.NUM_STEPS // params.NUM_AGENTS
-    # )
-    # params.MINIBATCH_SIZE = int(
-    #     params.NUM_AGENTS * params.NUM_STEPS // params.NUM_MINIBATCHES
-    # )
-    # params.BATCH_SIZE = params.NUM_AGENTS * params.NUM_STEPS
+
     params = params.replace(
         NUM_UPDATES=int(params.TOTAL_TIMESTEPS // params.NUM_STEPS // params.NUM_AGENTS),
         MINIBATCH_SIZE=int(params.NUM_AGENTS * params.NUM_STEPS // params.NUM_MINIBATCHES),
-        BATCH_SIZE=params.NUM_AGENTS * params.NUM_STEPS,
+        BATCH_SIZE=int(params.NUM_AGENTS * params.NUM_STEPS),
     )
+
+    # Define a linear learning rate schedule
     def linear_schedule(count):
         frac = (
             1.0
@@ -65,6 +61,7 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
         )
         return params.LR * frac
 
+    # Define the training function
     def train(rng):
         # NETWORK
         rng, _rng = jax.random.split(rng)
@@ -88,26 +85,18 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
             tx=tx,
         )
 
-        # ENV
-        rng, _rng = jax.random.split(rng)
-        reset_rng = jax.random.split(_rng, params.NUM_AGENTS)
-        obsv, env_state = env.reset(reset_rng, env_params)
-        runner_state = (train_state, env_state, obsv, rng)
-
         # TRAIN LOOP
-        def _update_step(runner_state, unused):
-            def _env_step(runner_state, unused):
-                train_state, env_state, last_obs, rng = runner_state
+        def _update_step(train_state, rng):
+            def _env_step(runner_state, rng):
+                train_state, env_state, last_obs = runner_state
 
                 # SELECT ACTION
-                rng, _rng = jax.random.split(rng)
                 pi, value = network.apply(train_state.params, last_obs)
-                action = pi.sample(_rng)
+                action = pi.sample(rng)
                 log_prob = pi.log_prob(action)
 
                 # STEP ENV
-                rng, _rng = jax.random.split(rng)
-                rng_step = jax.random.split(_rng, params.NUM_AGENTS)
+                rng_step = jax.random.split(rng, params.NUM_AGENTS)
                 obsv, env_state, reward, done, info = env.step(
                     rng_step, env_state, action, env_params
                 )
@@ -115,22 +104,22 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                 transition = Transition(
                     done, action, value, reward, log_prob, last_obs, info
                 )
-                runner_state = (train_state, env_state, obsv, rng)
+                runner_state = (train_state, env_state, obsv)
                 return runner_state, transition
 
             # RESET ENV
-            train_state, _, _, rng = runner_state
             reset_rng = jax.random.split(rng, params.NUM_AGENTS)
             obsv, env_state = env.reset(reset_rng, env_params)
-            runner_state = (train_state, env_state, obsv, rng)
+            runner_state = (train_state, env_state, obsv)
 
             # COLLECT TRAJECTORIES
+            step_rng = jax.random.split(rng, params.NUM_STEPS)
             runner_state, traj_batch = jax.lax.scan(
-                _env_step, runner_state, None, params.NUM_STEPS
+                _env_step, runner_state, step_rng, length=params.NUM_STEPS
             )
 
             # CALCULATE ADVANTAGE
-            train_state, env_state, last_obs, rng = runner_state
+            train_state, env_state, last_obs = runner_state
             _, last_val = network.apply(train_state.params, last_obs)
 
             def _calculate_gae(traj_batch, last_val):
@@ -158,9 +147,29 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                 return advantages, advantages + traj_batch.value
 
             advantages, targets = _calculate_gae(traj_batch, last_val)
+            # NORMALIZE ADVANTAGES per ROLLOUT
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+            # BATCH PREPARATION
+            batch = (traj_batch, advantages, targets)
+            batch = jax.tree.map(
+                lambda x: x.reshape((params.BATCH_SIZE,) + x.shape[2:]), batch
+            )
+            # SHUFFLE THE BATCH
+            permutation = jax.random.permutation(rng, params.BATCH_SIZE)
+            shuffled_batch = jax.tree.map(
+                lambda x: jnp.take(x, permutation, axis=0), batch
+            )
+            # SPLIT INTO MINIBATCHES
+            minibatches = jax.tree.map(
+                lambda x: jnp.reshape(
+                    x, [params.NUM_MINIBATCHES, -1] + list(x.shape[1:])
+                ),
+                shuffled_batch,
+            )
 
-            # UPDATE NETWORK
-            def _update_epoch(update_state, unused):
+            # UPDATE EPOCH
+            def _update_epoch(train_state, unused):
+                # UPDATE MINIBATCH
                 def _update_minbatch(train_state, batch_info):
                     traj_batch, advantages, targets = batch_info
 
@@ -172,7 +181,7 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                         # CALCULATE VALUE LOSS
                         value_pred_clipped = traj_batch.value + (
                             value - traj_batch.value
-                        ).clip(-ppo_params.CLIP_EPS, ppo_params.CLIP_EPS)
+                        ).clip(-ppo_params.CLIP_VALUE, ppo_params.CLIP_VALUE)
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = (
@@ -181,7 +190,8 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
 
                         # CALCULATE ACTOR LOSS
                         ratio = jnp.exp(log_prob - traj_batch.log_prob)
-                        gae = (gae - gae.mean()) / (gae.std() + 1e-8)
+                        # ADVANTAGE NORMALIZATION per MINIBATCH
+                        # gae = (gae - gae.mean()) / (gae.std() + 1e-8)
                         loss_actor1 = ratio * gae
                         loss_actor2 = (
                             jnp.clip(
@@ -200,72 +210,63 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                             + ppo_params.VF_COEF * value_loss
                             - ppo_params.ENT_COEF * entropy
                         )
-                        return total_loss, (value_loss, loss_actor, entropy)
+                        return total_loss, (loss_actor, value_loss, entropy)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
                         train_state.params, params, traj_batch, advantages, targets
                     )
                     train_state = train_state.apply_gradients(grads=grads)
+
                     return train_state, total_loss
 
-                train_state, traj_batch, advantages, targets, rng = update_state
-                rng, _rng = jax.random.split(rng)
-                batch_size = params.MINIBATCH_SIZE * params.NUM_MINIBATCHES
-                assert (
-                    batch_size == params.NUM_STEPS * params.NUM_AGENTS
-                ), "batch size must be equal to number of steps * number of envs"
-                permutation = jax.random.permutation(_rng, batch_size)
-                batch = (traj_batch, advantages, targets)
-                batch = jax.tree_util.tree_map(
-                    lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
-                )
-                shuffled_batch = jax.tree_util.tree_map(
-                    lambda x: jnp.take(x, permutation, axis=0), batch
-                )
-                minibatches = jax.tree_util.tree_map(
-                    lambda x: jnp.reshape(
-                        x, [params.NUM_MINIBATCHES, -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch,
-                )
                 train_state, total_loss = jax.lax.scan(
-                    _update_minbatch, train_state, minibatches
+                    _update_minbatch, train_state, minibatches, length=params.NUM_MINIBATCHES
                 )
-                update_state = (train_state, traj_batch, advantages, targets, rng)
-                return update_state, total_loss
+                return train_state, total_loss
 
-            update_state = (train_state, traj_batch, advantages, targets, rng)
-            update_state, loss_info = jax.lax.scan(
-                _update_epoch, update_state, None, params.EPOCHS
+            train_state, loss_info = jax.lax.scan(
+                _update_epoch, train_state, None, length=params.EPOCHS
             )
-            train_state = update_state[0]
-            metric = traj_batch.info
-            rng = update_state[-1]
+            metric = (traj_batch.info, loss_info)
 
             if params.DEBUG:
-                def callback(info):
+                def callback(metric):
+                    info, loss_info = metric
+                    total_loss, (actor_loss_arr, value_loss_arr, entropy_arr) = loss_info
                     done_until = jnp.cumsum(info['done'], axis=0) # shape: (num_steps, num_agents)
                     done_until = jnp.where(done_until == 0, 1, 0)
                     total_rewards = jnp.mean(jnp.sum(info['reward'] * done_until, axis=0))
                     avg_length = jnp.mean(jnp.sum(done_until, axis=0))
                     print(
-                        Fore.YELLOW
-                        + f"Average episode length: {avg_length:.2f}"
-                        + "\t | \t"
+                        Fore.GREEN
+                        + f"\tAverage episode length: {avg_length:.2f}"
+                        + "\t|\t"
                         + Fore.BLUE
                         + f"Total rewards: {total_rewards:.2f}"
+                        + "\t|\t",
+                        end="",
                     )
+                    print(
+                        Fore.CYAN
+                        + f"Actor Loss: {jnp.mean(actor_loss_arr):e}"
+                        + "\t|\t"
+                        + Fore.MAGENTA
+                        + f"Value Loss: {jnp.mean(value_loss_arr):e}"
+                        + "\t|\t"
+                        + Fore.YELLOW
+                        + f"Entropy: {jnp.mean(entropy_arr):.4f}"
+                    )
+
                 jax.debug.callback(callback, metric)
 
-            runner_state = (train_state, env_state, last_obs, rng)
-            return runner_state, metric
+            return train_state, metric
 
-        rng, _rng = jax.random.split(rng)
-        runner_state = (train_state, env_state, obsv, _rng)
-        runner_state, metric = jax.lax.scan(
-            _update_step, runner_state, None, params.NUM_UPDATES
+        # ENV
+        rngs = jax.random.split(rng, params.NUM_UPDATES)
+        train_state, metric = jax.lax.scan(
+            _update_step, train_state, rngs, length=params.NUM_UPDATES
         )
-        return {"runner_state": runner_state, "metrics": metric}
+        return {"train_state": train_state, "metrics": metric}
 
     return train

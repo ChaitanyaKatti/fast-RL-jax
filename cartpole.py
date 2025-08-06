@@ -1,8 +1,6 @@
 from flax import struct
 import jax.numpy as jnp
-from jax import random, jit, vmap
-from functools import partial
-from typing import Tuple
+from jax import random, vmap
 from env import Env, EnvParams, EnvState
 
 @struct.dataclass
@@ -12,18 +10,18 @@ class CartPoleParams(EnvParams):
     m_p: float = 0.1            # Mass of the pole
     half_length: float = 0.5    # Half the length of the pole
     g: float = 9.8              # Acceleration due to gravity
-    mu_c: float = 0.1           # Coefficient of friction for the cart
-    mu_p: float = 0.1           # Coefficient of friction for the pole
-    force_mag: float = 10.0     # Magnitude of the force applied to the cart
+    mu_c: float = 0.01          # Coefficient of friction for the cart
+    mu_p: float = 0.001         # Coefficient of friction for the pole
+    force_mag: float = 5.0     # Magnitude of the force applied to the cart
     dt: float = 0.05            # Time step for integration
     x_threshold: float = 3.0    # Position at which the episode terminates
-    time_limit: float = 100.0    # Time limit for the episode
+    num_steps: int = 100        # Time limit for the episode in steps
 
 @struct.dataclass
 class CartPoleState(EnvState):
     physics: jnp.ndarray        # shape: (num_agents, 5) # [x, x_dot, theta, theta_dot, t]
 
-class CartPoleEnv(Env):    
+class CartPoleEnv(Env):
     @classmethod
     def reset(cls, key: jnp.ndarray, params: CartPoleParams):
         low =  jnp.array([-params.x_threshold/2, -0.5, -jnp.pi, -0.5, 0.0])
@@ -32,7 +30,7 @@ class CartPoleEnv(Env):
         physics = vmap(
             lambda k: random.uniform(k, shape=(5), minval=low, maxval=high)
         )(key)
-                
+
         state = CartPoleState(physics=physics)
         obs = cls.observation(state, params)
 
@@ -53,10 +51,10 @@ class CartPoleEnv(Env):
     @staticmethod
     def observation_space(params: CartPoleParams):
         # Observation space: [x, x_dot, theta, theta_dot, t]
-        low =  jnp.array([-params.x_threshold, -jnp.inf, -jnp.pi, -jnp.inf, 0.0])
-        high = jnp.array([ params.x_threshold,  jnp.inf,  jnp.pi,  jnp.inf, params.time_limit])
+        low =  jnp.array([-params.x_threshold, -jnp.inf, -jnp.pi, -jnp.inf])
+        high = jnp.array([ params.x_threshold,  jnp.inf,  jnp.pi,  jnp.inf])
         return low, high
-    
+
     @staticmethod
     def cartpole_step(state: CartPoleState, action: jnp.ndarray, params: CartPoleParams):
         x, x_dot, theta, theta_dot, t = state.physics.T
@@ -76,10 +74,20 @@ class CartPoleEnv(Env):
         theta_dot_dot = (3 / (7 * params.half_length)) * (
             params.g * sintheta - x_dot_dot * costheta - params.mu_p * theta_dot / (params.m_p * params.half_length)
         )
-        
+
         # Euler Update
         dx = jnp.stack([x_dot, x_dot_dot, theta_dot, theta_dot_dot, jnp.ones_like(x)], axis=-1)
         next_physics = state.physics + dx * params.dt
+
+        # Bound the angles to [-pi, pi]
+        next_physics = next_physics.at[:, 2].set(jnp.mod(next_physics[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi)
+
+        # Clip the position, Zero the velocity, if out of bounds
+        out_of_bounds = jnp.abs(next_physics[:, 0]) > params.x_threshold
+        x = jnp.clip(next_physics[:, 0], -params.x_threshold, params.x_threshold)
+        v = jnp.where(out_of_bounds, 0.0, next_physics[:, 1])
+        next_physics = next_physics.at[:, 0].set(x)
+        next_physics = next_physics.at[:, 1].set(v)
 
         return CartPoleState(physics=next_physics)
 
@@ -97,6 +105,4 @@ class CartPoleEnv(Env):
 
     @staticmethod
     def observation(state: CartPoleState, params: CartPoleParams) -> jnp.ndarray:
-        return state.physics
-
- 
+        return state.physics[:, :-1]  # Exclude the time step from the observation

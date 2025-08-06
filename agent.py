@@ -2,19 +2,17 @@ import jax
 import jax.numpy as jnp
 import flax.linen as nn
 from flax.linen.initializers import orthogonal
-import optax
-from flax.training.train_state import TrainState
 
 class MultivariateNormalDiag:
     def __init__(self, loc, scale_diag):
         """
-        loc: mean vector (..., k)
+        loc: mean vector (..., k) where k is the dimensionality of the distribution
         scale_diag: std deviation vector (..., k), must be positive
         """
-        self.loc = jnp.asarray(loc)
-        self.scale_diag = jnp.asarray(scale_diag)
-        self.event_shape = self.loc.shape[-1:]
-        self.batch_shape = self.loc.shape[:-1]
+        self.loc = jnp.asarray(loc)                 # Shape (..., k)
+        self.scale_diag = jnp.asarray(scale_diag)   # Shape (..., k)
+        self.event_shape = self.loc.shape[-1:]      # Shape (k,)
+        self.batch_shape = self.loc.shape[:-1]      # Shape (...)
 
     def sample(self, key, sample_shape=()):
         """
@@ -22,7 +20,7 @@ class MultivariateNormalDiag:
         sample_shape: tuple of leading sample dimensions
         returns: samples of shape sample_shape + batch_shape + event_shape
         """
-        eps = jax.random.normal(key, shape=self.loc.shape)
+        eps = jax.random.normal(key, shape=sample_shape + self.loc.shape)
         return self.loc + eps * self.scale_diag
 
     def log_prob(self, value):
@@ -33,7 +31,7 @@ class MultivariateNormalDiag:
         diff = (value - self.loc) / self.scale_diag
         log_det = -jnp.sum(jnp.log(self.scale_diag), axis=-1)
         norm_const = -0.5 * self.event_shape[0] * jnp.log(2 * jnp.pi)
-        quadratic = -0.5 * jnp.sum(diff**2, axis=-1, keepdims=True)
+        quadratic = -0.5 * jnp.sum(diff**2, axis=-1)
         return log_det + norm_const + quadratic
 
     def entropy(self):
@@ -49,16 +47,16 @@ class ActorCritic(nn.Module):
     @nn.compact
     def __call__(self, x):
         # Actor network
-        actor = nn.relu(nn.Dense(32)(x))
-        actor = nn.relu(nn.Dense(32)(actor))
-        mean = nn.Dense(self.action_dim)(actor)
-        logtstd = self.param("log_std", nn.initializers.zeros, (self.action_dim,))
-        pi = MultivariateNormalDiag(mean, jnp.exp(logtstd))
+        actor = nn.leaky_relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(x))
+        actor = nn.leaky_relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(actor))
+        mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01))(actor)
+        log_std = self.param("log_std", nn.initializers.constant(-0.5), (self.action_dim,))
+        pi = MultivariateNormalDiag(mean, jnp.exp(log_std))
 
         # Critic network
-        critic = nn.relu(nn.Dense(32)(x))
-        critic = nn.relu(nn.Dense(32)(critic))
-        critic = nn.Dense(1)(critic)
+        critic = nn.leaky_relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(x))
+        critic = nn.leaky_relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(critic))
+        critic = nn.Dense(1, kernel_init=orthogonal(1))(critic)
         critic = jnp.squeeze(critic, axis=-1)
 
         return pi, critic
@@ -72,7 +70,7 @@ class PrivilegedActorCritic(nn.Module):
         actor = nn.leaky_relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(actor_obs))
         actor = nn.leaky_relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(actor))
         mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01))(actor)
-        log_std = self.param("log_std", nn.initializers.zeros, (self.action_dim,))
+        log_std = self.param("log_std", nn.initializers.constant(-0.5), (self.action_dim,))
         pi = MultivariateNormalDiag(mean, jnp.exp(log_std))
 
         # Critic network
