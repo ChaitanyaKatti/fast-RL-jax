@@ -173,7 +173,7 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                 def _update_minbatch(train_state, batch_info):
                     traj_batch, advantages, targets = batch_info
 
-                    def _loss_fn(network_params: Dict, ppo_params:PPOParams, traj_batch, gae, targets):
+                    def _loss_fn(network_params: Dict, traj_batch, gae, targets):
                         # RERUN NETWORK
                         pi, value = network.apply(network_params, traj_batch.obs)
                         log_prob = pi.log_prob(traj_batch.action)
@@ -181,7 +181,7 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                         # CALCULATE VALUE LOSS
                         value_pred_clipped = traj_batch.value + (
                             value - traj_batch.value
-                        ).clip(-ppo_params.CLIP_VALUE, ppo_params.CLIP_VALUE)
+                        ).clip(-params.CLIP_VALUE, params.CLIP_VALUE)
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = (
@@ -190,32 +190,32 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
 
                         # CALCULATE ACTOR LOSS
                         ratio = jnp.exp(log_prob - traj_batch.log_prob)
-                        # ADVANTAGE NORMALIZATION per MINIBATCH
-                        # gae = (gae - gae.mean()) / (gae.std() + 1e-8)
-                        loss_actor1 = ratio * gae
-                        loss_actor2 = (
-                            jnp.clip(
-                                ratio,
-                                1.0 - ppo_params.CLIP_EPS,
-                                1.0 + ppo_params.CLIP_EPS,
-                            )
-                            * gae
-                        )
-                        # loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
-                        loss_actor = -(ratio * gae - jnp.abs(gae) * jnp.square(ratio - 1.0)/(2.0 * ppo_params.CLIP_EPS)) # Simple Policy Optimization
+
+                        # PPO, Clipped Type L1 Loss
+                        # loss_actor = -jnp.minimum(
+                        #     ratio * gae,
+                        #     jnp.clip(ratio, 1.0 - params.CLIP_EPS, 1.0 + params.CLIP_EPS,)* gae
+                        # )
+
+                        # Simple Policy Optimization, Type L2 Loss
+                        loss_actor = -(ratio * gae - jnp.abs(gae) * jnp.square(ratio - 1.0)/(2.0 * params.CLIP_EPS))
+
+                        # SPO, Type L1 Loss
+                        # loss_actor = jnp.abs(gae*(ratio - 1) - jnp.abs(gae) * params.CLIP_EPS) # Type L1 loss
+
                         loss_actor = loss_actor.mean()
                         entropy = pi.entropy().mean()
 
                         total_loss = (
                             loss_actor
-                            + ppo_params.VF_COEF * value_loss
-                            - ppo_params.ENT_COEF * entropy
+                            + params.VF_COEF * value_loss
+                            - params.ENT_COEF * entropy
                         )
                         return total_loss, (loss_actor, value_loss, entropy)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     total_loss, grads = grad_fn(
-                        train_state.params, params, traj_batch, advantages, targets
+                        train_state.params, traj_batch, advantages, targets
                     )
                     train_state = train_state.apply_gradients(grads=grads)
 

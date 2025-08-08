@@ -83,11 +83,11 @@ class CartPoleEnv(Env):
         next_physics = next_physics.at[:, 2].set(jnp.mod(next_physics[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi)
 
         # Clip the position, Zero the velocity, if out of bounds
-        out_of_bounds = jnp.abs(next_physics[:, 0]) > params.x_threshold
-        x = jnp.clip(next_physics[:, 0], -params.x_threshold, params.x_threshold)
-        v = jnp.where(out_of_bounds, 0.0, next_physics[:, 1])
-        next_physics = next_physics.at[:, 0].set(x)
-        next_physics = next_physics.at[:, 1].set(v)
+        # out_of_bounds = jnp.abs(next_physics[:, 0]) > params.x_threshold
+        # x = jnp.clip(next_physics[:, 0], -params.x_threshold, params.x_threshold)
+        # v = jnp.where(out_of_bounds, 0.0, next_physics[:, 1])
+        # next_physics = next_physics.at[:, 0].set(x)
+        # next_physics = next_physics.at[:, 1].set(v)
 
         return CartPoleState(physics=next_physics)
 

@@ -50,11 +50,12 @@ def plot(xs, thetas, params):
     plt.show()
     
 if __name__ == "__main__":
+    jax.default_device(jax.devices('cpu')[0])
+
     listener = keyboard.Listener(on_press=on_press)
     action = 0  # Default action
     listener.start()
 
-    jax.default_device(jax.devices('cpu')[0])
     env = CartPoleEnv()
     env_params = CartPoleParams(num_agents=10)
     network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])

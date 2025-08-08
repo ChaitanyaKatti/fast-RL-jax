@@ -4,20 +4,22 @@ from cartpole import CartPoleEnv, CartPoleParams
 
 import jax
 import jax.numpy as jnp
-from colorama import Fore, init
+import colorama
+from colorama import Fore, Style, Back
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 from animate_cartpole import plot
 
 jax.default_device(jax.devices('cuda')[0])
-init(autoreset=True)
+colorama.init(autoreset=True)
 
 def test(network_params):
+    jax.default_device(jax.devices('cpu')[0])
     fig, ax = plt.subplots(figsize=(16, 6))
 
     # Initialize the environment and parameters
     test_env = CartPoleEnv()
-    test_env_params = CartPoleParams(num_agents=6)
+    test_env_params = CartPoleParams(num_agents=6, num_steps=100) # Same as training environment
 
     # Reset the environment
     key = jax.random.PRNGKey(0)
@@ -57,18 +59,18 @@ def test(network_params):
 
 if __name__ == "__main__":
     env = CartPoleEnv()
-    env_params = CartPoleParams(num_agents=100)
+    env_params = CartPoleParams(num_agents=1024, num_steps=100)
     ppo_params = PPOParams(
-        LR=1e-3,
-        TOTAL_TIMESTEPS=3_000_000,
+        LR=6e-4,
+        TOTAL_TIMESTEPS=50_000_000,
         NUM_AGENTS=env_params.num_agents,
-        NUM_STEPS=env_params.num_steps,
-        NUM_MINIBATCHES=200,
+        NUM_STEPS=env_params.num_steps, # 100
+        NUM_MINIBATCHES=64,
         ANNEAL_LR=False,
         MAX_GRAD_NORM=1.0,
-        CLIP_VALUE=1.5,
+        CLIP_VALUE=1.0,
         CLIP_EPS=0.2,
-        EPOCHS=5,
+        EPOCHS=4,
         ENT_COEF=0.01,
         DEBUG=True)
 
@@ -78,6 +80,6 @@ if __name__ == "__main__":
     out = train(rng)
     # out.block_until_ready()
 
-    print(Fore.GREEN + "Training complete. Testing the agent...")
+    print(Fore.GREEN + Style.BRIGHT + Back.WHITE + "Training complete. Testing the agent...")
     network_params = out['train_state'].params
-    test(network_params)  
+    test(network_params)
