@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 from jax.scipy.special import gammaln
+
 class MultivariateNormalDiag:
     def __init__(self, loc, scale_diag):
         """
@@ -28,7 +29,7 @@ class MultivariateNormalDiag:
         """
         k = self.event_shape[0]
         diff = (value - self.loc) / self.scale_diag
-        return  (
+        return (
             -0.5 * k * jnp.log(2 * jnp.pi)
             - jnp.sum(jnp.log(self.scale_diag), axis=-1)
             -0.5 * jnp.sum(jnp.square(diff), axis=-1)
@@ -40,7 +41,6 @@ class MultivariateNormalDiag:
         """
         k = self.event_shape[0]
         return 0.5 * k * (jnp.log(2 * jnp.pi * jnp.e)) + jnp.sum(jnp.log(self.scale_diag), axis=-1)
-
 
 class TanhMultivariateNormalDiag(MultivariateNormalDiag):
     def sample(self, key, sample_shape=()):
