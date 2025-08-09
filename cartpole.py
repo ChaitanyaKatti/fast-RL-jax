@@ -142,7 +142,7 @@ class CartPoleEnv(Env):
             )
 
             # Draw axle
-            plt.plot(cart_x, cart_y, 'ko', markersize=6)
+            plt.plot(cart_x, cart_y, 'ko', markersize=6, alpha=0.6)
 
         plt.xlim(-4, 4)
         plt.ylim(-1.5, 1.5)
