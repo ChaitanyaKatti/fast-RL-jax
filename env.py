@@ -67,3 +67,13 @@ class Env:
             Tuple of low and high bounds for the observation space.
         '''
         raise NotImplementedError()
+
+    @staticmethod
+    def render(state: EnvState, params: EnvParams) -> None:
+        '''
+        Render the environment state.
+        Args:
+            state: Current state of the environment.
+            params: Environment parameters.
+        '''
+        raise NotImplementedError()

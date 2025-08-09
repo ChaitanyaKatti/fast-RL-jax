@@ -109,7 +109,7 @@ class CartPoleEnv(Env):
         return state.physics[:, :-1]  # Exclude the time step from the observation
 
     @staticmethod
-    def render(state: CartPoleState, params: CartPoleParams):
+    def render(state: CartPoleState, params: CartPoleParams) -> None:
         # Draw the cart
         xs, thetas = state.physics[:, 0], state.physics[:, 2]
         cart_width = 0.4
@@ -150,4 +150,4 @@ class CartPoleEnv(Env):
         plt.xlabel('x')
         plt.ylabel('y')
         plt.title('CartPole')
-
+        plt.grid(alpha=0.3)
