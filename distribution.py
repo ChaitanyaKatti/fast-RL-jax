@@ -114,7 +114,7 @@ class BetaDistribution:
         self.beta = jnp.asarray(beta)
         self.event_shape = self.alpha.shape[-1:]
         self.batch_shape = self.alpha.shape[:-1]
-    
+
     def sample(self, key, sample_shape=()):
         """
         key: PRNGKey
@@ -122,7 +122,7 @@ class BetaDistribution:
         returns: samples of shape sample_shape + batch_shape + event_shape
         """
         return jax.random.beta(key, self.alpha, self.beta, shape=sample_shape + self.batch_shape + self.event_shape)
-    
+
     def log_prob(self, value):
         """
         value: tensor of shape [..., k] where k is the number of Beta variables
@@ -135,7 +135,7 @@ class BetaDistribution:
             gammaln(self.beta) +
             gammaln(self.alpha + self.beta)
         )
-    
+
     def entropy(self):
         """
         returns: entropy for each batch element
