@@ -1,7 +1,8 @@
 import jax.numpy as jnp
 import flax.linen as nn
 from flax.linen.initializers import orthogonal
-from distribution import BetaDistribution, MultivariateNormalDiag, TanhMultivariateNormalDiag
+from distribution import Distribution, BetaDistribution, MultivariateNormalDiag, TanhMultivariateNormalDiag
+from typing import Tuple
 
 class ActorCritic(nn.Module):
     action_dim: int
@@ -13,11 +14,11 @@ class ActorCritic(nn.Module):
         actor = nn.tanh(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(actor))
 
         # Tanh Entropy is maximized when std=0.8744 and mean=0, so we use this values to initialize
-        # log_std = self.param("log_std", nn.initializers.constant(jnp.log(0.8744)), (self.action_dim,)) # State independent log std
+        log_std = self.param("log_std", nn.initializers.constant(jnp.log(0.8744)), (self.action_dim,)) # State independent log std
         mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01))(actor)
-        log_std = nn.Dense(self.action_dim, kernel_init=orthogonal(jnp.log(0.8744)))(actor)  # State dependent log std
-        pi = MultivariateNormalDiag(mean, jnp.exp(log_std))
-        # pi = TanhMultivariateNormalDiag(mean, jnp.exp(log_std))
+        # log_std = nn.Dense(self.action_dim, kernel_init=orthogonal(jnp.log(0.8744)))(actor)  # State dependent log std
+        # pi = MultivariateNormalDiag(mean, jnp.exp(log_std))
+        pi = TanhMultivariateNormalDiag(mean, jnp.exp(log_std))
         # pi = BetaDistribution(mean, jnp.exp(log_std))
 
         # Critic network
@@ -27,6 +28,9 @@ class ActorCritic(nn.Module):
         critic = jnp.squeeze(critic, axis=-1)
 
         return pi, critic
+    
+    def apply(self, variables, *args, rngs = None, method = None, mutable = False, capture_intermediates = False, **kwargs) -> Tuple[Distribution, jnp.ndarray]:
+        return super().apply(variables, *args, rngs=rngs, method=method, mutable=mutable, capture_intermediates=capture_intermediates, **kwargs)
 
 class PrivilegedActorCritic(nn.Module):
     action_dim: int
@@ -47,3 +51,4 @@ class PrivilegedActorCritic(nn.Module):
         critic = jnp.squeeze(critic, axis=-1)
 
         return pi, critic
+    
