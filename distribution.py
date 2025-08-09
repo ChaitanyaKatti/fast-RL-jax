@@ -2,7 +2,39 @@ import jax
 import jax.numpy as jnp
 from jax.scipy.special import gammaln
 
-class MultivariateNormalDiag:
+class Distribution:
+    def sample(self, key, sample_shape=()):
+        """
+        Sample from the distribution.
+
+        Args:
+            key (jnp.ndarray): PRNGKey
+            sample_shape (tuple): tuple of leading sample dimensions
+
+        Returns:
+            samples of shape sample_shape + batch_shape + event_shape
+        """
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    def log_prob(self, value):
+        """
+        Compute the log probability of the given value.
+
+        Args:
+            value (jnp.ndarray): tensor of shape [..., k] where k is the dimensionality of the distribution
+        Returns:
+            log probability of each value with shape [...]
+        """
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    def entropy(self):
+        """
+        Returns:
+            Entropy for each batch element
+        """
+        raise NotImplementedError("Subclasses should implement this method.")
+
+class MultivariateNormalDiag(Distribution):
     def __init__(self, loc, scale_diag):
         """
         loc: mean vector (..., k) where k is the dimensionality of the distribution
@@ -14,19 +46,10 @@ class MultivariateNormalDiag:
         self.batch_shape = self.loc.shape[:-1]      # Shape (...)
 
     def sample(self, key, sample_shape=()):
-        """
-        key: PRNGKey
-        sample_shape: tuple of leading sample dimensions
-        returns: samples of shape sample_shape + batch_shape + event_shape
-        """
         eps = jax.random.normal(key, shape=sample_shape + self.loc.shape)
         return self.loc + eps * self.scale_diag
 
     def log_prob(self, value):
-        """
-        value: tensor of shape [..., k]
-        returns: log probability of each value with shape [...]
-        """
         k = self.event_shape[0]
         diff = (value - self.loc) / self.scale_diag
         return (
@@ -36,40 +59,20 @@ class MultivariateNormalDiag:
         )
 
     def entropy(self):
-        """
-        returns: entropy for each batch element
-        """
         k = self.event_shape[0]
         return 0.5 * k * (jnp.log(2 * jnp.pi * jnp.e)) + jnp.sum(jnp.log(self.scale_diag), axis=-1)
 
 class TanhMultivariateNormalDiag(MultivariateNormalDiag):
     def sample(self, key, sample_shape=()):
-        """
-        Sample from the distribution and apply tanh to the samples.
-        Arguments:
-            key: PRNGKey
-            sample_shape: tuple of leading sample dimensions
-        Returns: samples of shape sample_shape + batch_shape + event_shape
-        """
         samples = super().sample(key, sample_shape)
         return jnp.tanh(samples)
 
     def log_prob(self, value):
-        """
-        Compute log probability of the tanh-transformed value.
-        Arguments:
-            value: tensor of shape [..., k] where k is the dimensionality of the distribution
-        Returns: log probability of each value with shape [...]
-        """
         # Apply inverse tanh transformation
         transformed_value = jnp.arctanh(value)
         return super().log_prob(transformed_value) - jnp.sum(jnp.log(1 - jnp.square(value)), axis=-1)
 
     def entropy(self):
-        """
-        Compute the entropy of the tanh-transformed distribution.
-        Returns: entropy for each batch element
-        """
         # No analytical entropy for tanh transformation, use Monte Carlo estimation
         # Optimal samples for fast MC entropy estimation
         samples32 = jnp.array([
@@ -104,7 +107,7 @@ class TanhMultivariateNormalDiag(MultivariateNormalDiag):
         # Return the total entropy
         return super().entropy() + log_abs_det_jacobians
 
-class BetaDistribution:
+class BetaDistribution(Distribution):
     def __init__(self, alpha, beta):
         """
         alpha: tensor of shape (..., k) where k is the number of Beta variables
@@ -116,18 +119,9 @@ class BetaDistribution:
         self.batch_shape = self.alpha.shape[:-1]
 
     def sample(self, key, sample_shape=()):
-        """
-        key: PRNGKey
-        sample_shape: tuple of leading sample dimensions
-        returns: samples of shape sample_shape + batch_shape + event_shape
-        """
         return jax.random.beta(key, self.alpha, self.beta, shape=sample_shape + self.batch_shape + self.event_shape)
 
     def log_prob(self, value):
-        """
-        value: tensor of shape [..., k] where k is the number of Beta variables
-        returns: log probability of each value with shape [...]
-        """
         return (
             (self.alpha - 1) * jnp.log(value) +
             (self.beta - 1) * jnp.log(1 - value) -
@@ -137,9 +131,6 @@ class BetaDistribution:
         )
 
     def entropy(self):
-        """
-        returns: entropy for each batch element
-        """
         return (
             gammaln(self.alpha + self.beta) -
             gammaln(self.alpha) -
