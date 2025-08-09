@@ -2,6 +2,7 @@ from flax import struct
 import jax.numpy as jnp
 from jax import random, vmap
 from env import Env, EnvParams, EnvState
+import matplotlib.pyplot as plt
 
 @struct.dataclass
 class CartPoleParams(EnvParams):
@@ -106,3 +107,47 @@ class CartPoleEnv(Env):
     @staticmethod
     def observation(state: CartPoleState, params: CartPoleParams) -> jnp.ndarray:
         return state.physics[:, :-1]  # Exclude the time step from the observation
+
+    @staticmethod
+    def render(state: CartPoleState, params: CartPoleParams):
+        # Draw the cart
+        xs, thetas = state.physics[:, 0], state.physics[:, 2]
+        cart_width = 0.4
+        cart_height = 0.2
+
+        for i in range(params.num_agents):
+            cart_x = xs[i]
+            cart_y = 0.0  # y position of the cart
+            # Draw cart as a box centered at (x, 0)
+            plt.gca().add_patch(
+                plt.Rectangle(
+                    (cart_x - cart_width / 2, cart_y - cart_height / 2),
+                    cart_width,
+                    cart_height,
+                    color="blue",
+                    alpha=0.6,
+                )
+            )
+
+            # Draw pole as a line from cart center at (x, 0) at angle theta
+            pole_length = params.half_length * 2
+            pole_x_end = cart_x + pole_length * jnp.sin(thetas[i])
+            pole_y_end = cart_y + pole_length * jnp.cos(thetas[i])
+            plt.plot(
+                [cart_x, pole_x_end],
+                [cart_y, pole_y_end],
+                color="red",
+                linewidth=3,
+                alpha=0.6,
+            )
+
+            # Draw axle
+            plt.plot(cart_x, cart_y, 'ko', markersize=6)
+
+        plt.xlim(-4, 4)
+        plt.ylim(-1.5, 1.5)
+        plt.gca().set_aspect('equal')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.title('CartPole')
+

@@ -8,14 +8,12 @@ import colorama
 from colorama import Fore, Style, Back
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
-from animate_cartpole import plot
 
 jax.default_device(jax.devices('cuda')[0])
 colorama.init(autoreset=True)
 
 def test(network_params):
     jax.default_device(jax.devices('cpu')[0])
-    fig, ax = plt.subplots(figsize=(16, 6))
 
     # Initialize the environment and parameters
     test_env = CartPoleEnv()
@@ -25,13 +23,15 @@ def test(network_params):
     key = jax.random.PRNGKey(0)
     keys = jax.random.split(key, test_env_params.num_agents)
     obs, state = test_env.reset(keys, test_env_params)
-    
+
     # Initialize the network
     network = ActorCritic(action_dim=test_env.action_space(test_env_params)[0].shape[0])
-    
+
     # Initialize total reward
     total_reward = jnp.zeros(test_env_params.num_agents)
-    
+
+    fig, ax = plt.subplots(figsize=(16, 6))
+
     def animate(i):
         nonlocal key, state, obs, network, network_params, total_reward
         if i % test_env_params.num_steps == 0:
@@ -47,12 +47,9 @@ def test(network_params):
         step_keys = jax.random.split(key, test_env_params.num_agents)
         obs, state, reward, terminated, info = test_env.step(step_keys, state, actions, test_env_params)
         total_reward += reward
-        
+
         ax.clear()
-        xs, thetas = state.physics[:, 0], state.physics[:, 2]
-        ax.set_xlim(-4, 4)
-        ax.set_ylim(-1.5, 1.5)
-        plot(xs, thetas, params=test_env_params)
+        test_env.render(state, test_env_params)
 
     ani = FuncAnimation(fig, animate, interval=1, cache_frame_data=False)
     plt.show()
@@ -78,7 +75,6 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(0)
     train = jax.jit(make_train(network, env, env_params, ppo_params))
     out = train(rng)
-    # out.block_until_ready()
 
     print(Fore.GREEN + Style.BRIGHT + Back.WHITE + "Training complete. Testing the agent...")
     network_params = out['train_state'].params
