@@ -1,6 +1,7 @@
 from network import ActorCritic
 from ppo import make_train, PPOParams
-from cartpole import CartPoleEnv, CartPoleParams
+# from cartpole import CartPoleEnv as Env, CartPoleParams as EnvParams
+from copter2d import Copter2DEnv as Env, Copter2DParams as EnvParams
 
 import jax
 import jax.numpy as jnp
@@ -13,11 +14,13 @@ jax.default_device(jax.devices('cuda')[0])
 colorama.init(autoreset=True)
 
 def test(network_params):
-    jax.default_device(jax.devices('cpu')[0])
+    cpu = jax.devices('cpu')[0]
+    jax.default_device(cpu)
+    network_params = jax.tree.map(lambda x: jax.device_put(x, cpu), network_params)
 
     # Initialize the environment and parameters
-    test_env = CartPoleEnv()
-    test_env_params = CartPoleParams(num_agents=6, num_steps=100) # Same as training environment
+    test_env = Env()
+    test_env_params = EnvParams(num_agents=5, num_steps=100) # Same as training environment
 
     # Reset the environment
     key = jax.random.PRNGKey(0)
@@ -42,6 +45,7 @@ def test(network_params):
 
         pi, _ = network.apply(network_params, obs)
         key, _key = jax.random.split(key)
+        actions = pi.sample(key) # Sample actions from the policy
         actions = pi.loc # Deterministic actions
 
         step_keys = jax.random.split(key, test_env_params.num_agents)
@@ -55,13 +59,13 @@ def test(network_params):
     plt.show()
 
 if __name__ == "__main__":
-    env = CartPoleEnv()
-    env_params = CartPoleParams(num_agents=1024, num_steps=100)
+    env = Env()
+    env_params = EnvParams(num_agents=1024, num_steps=100)
     ppo_params = PPOParams(
         LR=6e-4,
         TOTAL_TIMESTEPS=50_000_000,
         NUM_AGENTS=env_params.num_agents,
-        NUM_STEPS=env_params.num_steps, # 100
+        NUM_STEPS=env_params.num_steps,  # 100
         NUM_MINIBATCHES=64,
         ANNEAL_LR=False,
         MAX_GRAD_NORM=1.0,
@@ -69,7 +73,8 @@ if __name__ == "__main__":
         CLIP_EPS=0.2,
         EPOCHS=4,
         ENT_COEF=0.01,
-        DEBUG=True)
+        DEBUG=True,
+    )
 
     network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
     rng = jax.random.PRNGKey(0)
@@ -77,5 +82,6 @@ if __name__ == "__main__":
     out = train(rng)
 
     print(Fore.GREEN + Style.BRIGHT + Back.WHITE + "Training complete. Testing the agent...")
+
     network_params = out['train_state'].params
     test(network_params)

@@ -4,7 +4,6 @@ from jax import random
 import matplotlib.pyplot as plt
 from cartpole import CartPoleEnv, CartPoleParams
 from matplotlib.animation import FuncAnimation
-from pynput.keyboard import Key, Listener, Controller 
 from pynput import keyboard
 from network import ActorCritic
 
