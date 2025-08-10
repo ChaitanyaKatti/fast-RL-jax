@@ -6,17 +6,17 @@ import matplotlib.pyplot as plt
 
 @struct.dataclass
 class CartPoleParams(EnvParams):
-    num_agents: int = 1         # Number of agents in the environment
-    m_c: float = 1.0            # Mass of the cart
-    m_p: float = 0.1            # Mass of the pole
-    half_length: float = 0.5    # Half the length of the pole
-    g: float = 9.8              # Acceleration due to gravity
-    mu_c: float = 0.01          # Coefficient of friction for the cart
-    mu_p: float = 0.001         # Coefficient of friction for the pole
-    force_mag: float = 5.0      # Magnitude of the force applied to the cart
-    dt: float = 0.05            # Time step for integration
-    x_threshold: float = 3.0    # Position at which the episode terminates
-    num_steps: int = 100        # Time limit for the episode in steps
+    num_agents: int     # Number of agents in the environment
+    m_c: float          # Mass of the cart
+    m_p: float          # Mass of the pole
+    half_length: float  # Half the length of the pole
+    g: float            # Acceleration due to gravity
+    mu_c: float         # Coefficient of friction for the cart
+    mu_p: float         # Coefficient of friction for the pole
+    force_mag: float    # Magnitude of the force applied to the cart
+    dt: float           # Time step for integration
+    x_threshold: float  # Position at which the episode terminates
+    num_steps: int      # Time limit for the episode in steps
 
 @struct.dataclass
 class CartPoleState(EnvState):
@@ -151,3 +151,36 @@ class CartPoleEnv(Env):
         plt.ylabel('y')
         plt.title('CartPole')
         plt.grid(alpha=0.3)
+
+    @staticmethod
+    def makeParams(
+        num_agents: int = 1,
+        m_c: float = 1.0,
+        m_p: float = 0.1,
+        half_length: float = 0.5,
+        g: float = 9.8,
+        mu_c: float = 0.01,
+        mu_p: float = 0.001,
+        force_mag: float = 5.0,
+        dt: float = 0.05,
+        x_threshold: float = 3.0,
+        num_steps: int = 100,
+    ) -> CartPoleParams:
+        """
+        Factory function to create CartPoleParams with a specified arguments.
+        Returns:
+            CartPoleParams instance with the specified number of agents.
+        """
+        return CartPoleParams(
+            num_agents=num_agents,
+            m_c=m_c,
+            m_p=m_p,
+            half_length=half_length,
+            g=g,
+            mu_c=mu_c,
+            mu_p=mu_p,
+            force_mag=force_mag,
+            dt=dt,
+            x_threshold=x_threshold,
+            num_steps=num_steps,
+        )

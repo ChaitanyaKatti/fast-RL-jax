@@ -6,16 +6,16 @@ import matplotlib.pyplot as plt
 
 @struct.dataclass
 class Copter2DParams(EnvParams):
-    num_agents: int = 1         # Number of agents in the environment
-    mass: float = 1.0           # Mass of the drone
-    inertia: float = 1.0        # Inertia of the drone
-    arm_length: float = 0.5     # length of drone arm
-    g: float = 9.8              # Acceleration due to gravity
-    thurst_mag: float = 20.0    # Magnitude of the thrust applied to the drone
-    torque_mag: float = 10.0    # Magnitude of the thrust applied to the drone
-    dt: float = 0.05            # Time step for integration
-    x_threshold: float = 3.0    # Position at which the episode terminates
-    num_steps: int = 100        # Time limit for the episode in steps
+    num_agents: int     # Number of agents in the environment
+    mass: float         # Mass of the drone
+    inertia: float      # Inertia of the drone
+    arm_length: float   # length of drone arm
+    g: float            # Acceleration due to gravity
+    thurst_mag: float   # Magnitude of the thrust applied to the drone
+    torque_mag: float   # Magnitude of the thrust applied to the drone
+    dt: float           # Time step for integration
+    x_threshold: float  # Position at which the episode terminates
+    num_steps: int      # Time limit for the episode in steps
 
 @struct.dataclass
 class Copter2DState(EnvState):
@@ -92,7 +92,7 @@ class Copter2DEnv(Env):
         # next_physics = next_physics.at[:, 1].set(y)
         # next_physics = next_physics.at[:, 2].set(vx)
         # next_physics = next_physics.at[:, 3].set(vy)
-        
+
         return Copter2DState(physics=next_physics)
 
     @staticmethod
@@ -140,3 +140,29 @@ class Copter2DEnv(Env):
         plt.ylabel('y')
         plt.title('Copter2D')
         plt.grid(alpha=0.3)
+
+    @staticmethod
+    def makeParams(
+        num_agents: int = 1,
+        mass: float = 1.0,
+        inertia: float = 1.0,
+        arm_length: float = 0.5,
+        g: float = 9.8,
+        thurst_mag: float = 20.0,
+        torque_mag: float = 10.0,
+        dt: float = 0.05,
+        x_threshold: float = 3.0,
+        num_steps: int = 100,
+    ) -> Copter2DParams:
+        return Copter2DParams(
+            num_agents=num_agents,
+            mass=mass,
+            inertia=inertia,
+            arm_length=arm_length,
+            g=g,
+            thurst_mag=thurst_mag,
+            torque_mag=torque_mag,
+            dt=dt,
+            x_threshold=x_threshold,
+            num_steps=num_steps,
+        )

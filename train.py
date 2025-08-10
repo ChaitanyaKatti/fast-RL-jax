@@ -1,7 +1,7 @@
 from network import ActorCritic
 from ppo import make_train, PPOParams
-# from cartpole import CartPoleEnv as Env, CartPoleParams as EnvParams
-from copter2d import Copter2DEnv as Env, Copter2DParams as EnvParams
+from cartpole import CartPoleEnv as Env
+# from copter2d import Copter2DEnv as Env
 
 import jax
 import jax.numpy as jnp
@@ -20,7 +20,7 @@ def test(network_params):
 
     # Initialize the environment and parameters
     test_env = Env()
-    test_env_params = EnvParams(num_agents=5, num_steps=100) # Same as training environment
+    test_env_params = test_env.makeParams(num_agents=5, num_steps=100) # Same as training environment
 
     # Reset the environment
     key = jax.random.PRNGKey(0)
@@ -60,7 +60,7 @@ def test(network_params):
 
 if __name__ == "__main__":
     env = Env()
-    env_params = EnvParams(num_agents=1024, num_steps=100)
+    env_params = env.makeParams(num_agents=1024, num_steps=100)
     ppo_params = PPOParams(
         LR=6e-4,
         TOTAL_TIMESTEPS=50_000_000,
