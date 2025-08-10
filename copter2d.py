@@ -38,7 +38,7 @@ class Copter2DEnv(Env):
 
     @classmethod
     def step(cls, key: jnp.ndarray, state: Copter2DState, action: jnp.ndarray, params: Copter2DParams):
-        next_state = cls.Copter2D_step(state, action, params)
+        next_state = cls.copter2D_step(state, action, params)
         obs = cls.observation(next_state, params)
         terminated = cls.terminated(next_state, params)
         reward = cls.reward(next_state, params)
@@ -57,7 +57,7 @@ class Copter2DEnv(Env):
         return low, high
 
     @staticmethod
-    def Copter2D_step(state: Copter2DState, action: jnp.ndarray, params: Copter2DParams):
+    def copter2D_step(state: Copter2DState, action: jnp.ndarray, params: Copter2DParams):
         x, y, x_dot, y_dot, theta, theta_dot, t = state.physics.T
         action = jnp.clip(action, -1.0, 1.0)
         thrust = (0.5*action[:, 0] + 0.5) * params.thurst_mag
