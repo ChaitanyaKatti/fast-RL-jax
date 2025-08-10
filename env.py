@@ -77,3 +77,14 @@ class Env:
             params: Environment parameters.
         """
         raise NotImplementedError()
+
+    @staticmethod
+    def makeParams(**kwargs) -> EnvParams:
+        """
+        Create environment parameters with default values.
+        Args:
+            **kwargs: Additional parameters to override defaults.
+        Returns:
+            An instance of EnvParams with the specified parameters.
+        """
+        return EnvParams(**kwargs)
