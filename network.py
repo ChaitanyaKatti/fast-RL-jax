@@ -28,7 +28,7 @@ class ActorCritic(nn.Module):
         critic = jnp.squeeze(critic, axis=-1)
 
         return pi, critic
-    
+
     def apply(self, variables, *args, rngs = None, method = None, mutable = False, capture_intermediates = False, **kwargs) -> Tuple[Distribution, jnp.ndarray]:
         return super().apply(variables, *args, rngs=rngs, method=method, mutable=mutable, capture_intermediates=capture_intermediates, **kwargs)
 
@@ -51,4 +51,3 @@ class PrivilegedActorCritic(nn.Module):
         critic = jnp.squeeze(critic, axis=-1)
 
         return pi, critic
-    
