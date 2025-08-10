@@ -108,14 +108,13 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                 return runner_state, transition
 
             # RESET ENV
-            reset_rng = jax.random.split(rng, params.NUM_AGENTS)
-            obsv, env_state = env.reset(reset_rng, env_params)
+            obsv, env_state = env.reset(rng, env_params)
             runner_state = (train_state, env_state, obsv)
 
             # COLLECT TRAJECTORIES
-            step_rng = jax.random.split(rng, params.NUM_STEPS)
+            step_rngs = jax.random.split(rng, params.NUM_STEPS)
             runner_state, traj_batch = jax.lax.scan(
-                _env_step, runner_state, step_rng, length=params.NUM_STEPS
+                _env_step, runner_state, step_rngs, length=params.NUM_STEPS
             )
 
             # CALCULATE ADVANTAGE

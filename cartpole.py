@@ -28,9 +28,10 @@ class CartPoleEnv(Env):
         low =  jnp.array([-params.x_threshold/2, -0.5, -jnp.pi, -0.5, 0.0])
         high = jnp.array([ params.x_threshold/2,  0.5,  jnp.pi,  0.5, 0.0])
 
+        keys = random.split(key, params.num_agents)
         physics = vmap(
             lambda k: random.uniform(k, shape=(5), minval=low, maxval=high)
-        )(key)
+        )(keys)
 
         state = CartPoleState(physics=physics)
         obs = cls.observation(state, params)

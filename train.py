@@ -24,8 +24,7 @@ def test(network_params):
 
     # Reset the environment
     key = jax.random.PRNGKey(0)
-    keys = jax.random.split(key, test_env_params.num_agents)
-    obs, state = test_env.reset(keys, test_env_params)
+    obs, state = test_env.reset(key, test_env_params)
 
     # Initialize the network
     network = ActorCritic(action_dim=test_env.action_space(test_env_params)[0].shape[0])
@@ -38,8 +37,8 @@ def test(network_params):
     def animate(i):
         nonlocal key, state, obs, network, network_params, total_reward
         if i % test_env_params.num_steps == 0:
-            reset_keys = jax.random.split(key, test_env_params.num_agents)
-            obs, state = test_env.reset(reset_keys, test_env_params)
+            key, sub_key = jax.random.split(key, 2)
+            obs, state = test_env.reset(sub_key, test_env_params)
             print(f"Episode {i // test_env_params.num_steps}, Reward: {total_reward.mean()}")
             total_reward = jnp.zeros(test_env_params.num_agents)
 

@@ -38,8 +38,7 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots(figsize=(16, 6))
     key = random.PRNGKey(0)
-    keys = random.split(key, env_params.num_agents)
-    obs, state = env.reset(keys, env_params)
+    obs, state = env.reset(key, env_params)
     total_reward = jnp.zeros(env_params.num_agents)
 
     def animate(i):
@@ -57,8 +56,8 @@ if __name__ == "__main__":
         env.render(state, params=env_params)
 
         if i % env_params.num_steps == 0 or terminated.any():
-            reset_keys = random.split(key, env_params.num_agents)
-            obs, state = env.reset(reset_keys, env_params)
+            key, sub_key = random.split(key, 2)
+            obs, state = env.reset(sub_key, env_params)
             print(f"Step {i}, Reward: {total_reward.mean()}, Terminated: {terminated}")
             total_reward = jnp.zeros(env_params.num_agents)
 

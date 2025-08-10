@@ -26,10 +26,11 @@ class Copter2DEnv(Env):
     def reset(cls, key: jnp.ndarray, params: Copter2DParams):
         low =  jnp.array([-params.x_threshold/2, -params.x_threshold/2, -0.5, -0.5, -jnp.pi/2, -0.5, 0.0])
         high = jnp.array([ params.x_threshold/2,  params.x_threshold/2,  0.5,  0.5,  jnp.pi/2,  0.5, 0.0])
-
+        
+        keys = random.split(key, params.num_agents)
         physics = vmap(
             lambda k: random.uniform(k, shape=(7), minval=low, maxval=high)
-        )(key)
+        )(keys)
 
         state = Copter2DState(physics=physics)
         obs = cls.observation(state, params)
