@@ -1,7 +1,8 @@
 from network import ActorCritic
 from ppo import make_train, PPOParams
-from cartpole import CartPoleEnv as Env
+# from cartpole import CartPoleEnv as Env
 # from copter2d import Copter2DEnv as Env
+from crazyflie import CrazyflieEnv as Env
 
 import jax
 import jax.numpy as jnp
