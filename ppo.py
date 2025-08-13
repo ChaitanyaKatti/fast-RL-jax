@@ -228,18 +228,20 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
             train_state, loss_info = jax.lax.scan(
                 _update_epoch, train_state, None, length=params.EPOCHS
             )
-            metric = (traj_batch.info, loss_info)
+            metric = (traj_batch.info, loss_info, train_state.step // (params.NUM_MINIBATCHES * params.EPOCHS))
 
             if params.DEBUG:
                 def callback(metric):
-                    info, loss_info = metric
+                    info, loss_info, i = metric
                     total_loss, (actor_loss_arr, value_loss_arr, entropy_arr) = loss_info
                     done_until = jnp.cumsum(info['done'], axis=0) # shape: (num_steps, num_agents)
                     done_until = jnp.where(done_until == 0, 1, 0)
                     total_rewards = jnp.mean(jnp.sum(info['reward'] * done_until, axis=0))
                     avg_length = jnp.mean(jnp.sum(done_until, axis=0))
                     print(
-                        Fore.GREEN
+                        Fore.YELLOW
+                        + f"Step: {i:>6d}"
+                        + Fore.GREEN
                         + f"\tAverage episode length: {avg_length:.2f}"
                         + "\t|\t"
                         + Fore.BLUE
