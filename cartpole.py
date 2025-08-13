@@ -99,7 +99,7 @@ class CartPoleEnv(Env):
             1.0 # base reward for each step
             - (jnp.abs(state.physics[:, 0]) / params.x_threshold) #  position based reward
             - (jnp.abs(state.physics[:, 2]) / jnp.pi) # angle based reward
-        )
+        ) * params.dt
 
     @staticmethod
     def terminated(state: CartPoleState, params: CartPoleParams) -> jnp.ndarray:
