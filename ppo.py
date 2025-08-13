@@ -10,26 +10,26 @@ from colorama import Fore
 
 @dataclass
 class PPOParams:
-    LR: float = 3e-4
-    NUM_AGENTS: int = 1
-    NUM_STEPS: int = 128
-    TOTAL_TIMESTEPS: int = 1e6
-    EPOCHS: int = 4
-    NUM_MINIBATCHES: int = 4
-    GAMMA: float = 0.99
-    GAE_LAMBDA: float = 0.95
-    CLIP_EPS: float = 0.2
-    CLIP_VALUE: float = 0.5
-    ENT_COEF: float = 0.0
-    VF_COEF: float = 0.5
-    MAX_GRAD_NORM: float = 0.5
-    ANNEAL_LR: bool = False
-    DEBUG: bool = True
+    LR: float
+    NUM_AGENTS: int
+    NUM_STEPS: int
+    TOTAL_TIMESTEPS: int
+    EPOCHS: int
+    NUM_MINIBATCHES: int
+    GAMMA: float
+    GAE_LAMBDA: float
+    CLIP_EPS: float
+    CLIP_VALUE: float
+    ENT_COEF: float
+    VF_COEF: float
+    MAX_GRAD_NORM: float
+    ANNEAL_LR: bool
+    DEBUG: bool
 
     # Derived parameters
-    BATCH_SIZE: int = 0 # To be calculated based on NUM_AGENTS and NUM_STEPS
-    NUM_UPDATES: int = 0 # To be calculated based on TOTAL_TIMESTEPS, NUM_STEPS, and NUM_AGENTS
-    MINIBATCH_SIZE: int = 0 # To be calculated based on NUM_AGENTS, NUM_STEPS, and NUM_MINIBATCHES
+    BATCH_SIZE: int     # To be calculated based on NUM_AGENTS and NUM_STEPS
+    NUM_UPDATES: int    # To be calculated based on TOTAL_TIMESTEPS, NUM_STEPS, and NUM_AGENTS
+    MINIBATCH_SIZE: int # To be calculated based on NUM_AGENTS, NUM_STEPS, and NUM_MINIBATCHES
 
 @dataclass
 class Transition:
@@ -41,16 +41,55 @@ class Transition:
     obs: jnp.ndarray
     info: jnp.ndarray
 
-def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOParams):
+
+def make_params(
+    LR: float = 3e-4,
+    NUM_AGENTS: int = 1,
+    NUM_STEPS: int = 128,
+    TOTAL_TIMESTEPS: int = 1e6,
+    EPOCHS: int = 4,
+    NUM_MINIBATCHES: int = 4,
+    GAMMA: float = 0.99,
+    GAE_LAMBDA: float = 0.95,
+    CLIP_EPS: float = 0.2,
+    CLIP_VALUE: float = 0.5,
+    ENT_COEF: float = 0.0,
+    VF_COEF: float = 0.5,
+    MAX_GRAD_NORM: float = 0.5,
+    ANNEAL_LR: bool = False,
+    DEBUG: bool = True,
+) -> PPOParams:
     assert (
-        params.NUM_AGENTS * params.NUM_STEPS % params.NUM_MINIBATCHES == 0
+        NUM_AGENTS * NUM_STEPS % NUM_MINIBATCHES == 0
     ), "Number of agents * number of steps must be divisible by number of minibatches"
 
-    params = params.replace(
-        NUM_UPDATES=int(params.TOTAL_TIMESTEPS // params.NUM_STEPS // params.NUM_AGENTS),
-        MINIBATCH_SIZE=int(params.NUM_AGENTS * params.NUM_STEPS // params.NUM_MINIBATCHES),
-        BATCH_SIZE=int(params.NUM_AGENTS * params.NUM_STEPS),
+    BATCH_SIZE = NUM_AGENTS * NUM_STEPS
+    NUM_UPDATES = int(TOTAL_TIMESTEPS // NUM_STEPS // NUM_AGENTS)
+    MINIBATCH_SIZE = int(NUM_AGENTS * NUM_STEPS // NUM_MINIBATCHES)
+
+    return PPOParams(
+        LR=LR,
+        NUM_AGENTS=NUM_AGENTS,
+        NUM_STEPS=NUM_STEPS,
+        TOTAL_TIMESTEPS=TOTAL_TIMESTEPS,
+        EPOCHS=EPOCHS,
+        NUM_MINIBATCHES=NUM_MINIBATCHES,
+        GAMMA=GAMMA,
+        GAE_LAMBDA=GAE_LAMBDA,
+        CLIP_EPS=CLIP_EPS,
+        CLIP_VALUE=CLIP_VALUE,
+        ENT_COEF=ENT_COEF,
+        VF_COEF=VF_COEF,
+        MAX_GRAD_NORM=MAX_GRAD_NORM,
+        ANNEAL_LR=ANNEAL_LR,
+        DEBUG=DEBUG,
+        BATCH_SIZE=BATCH_SIZE,
+        NUM_UPDATES=NUM_UPDATES,
+        MINIBATCH_SIZE=MINIBATCH_SIZE,
     )
+
+
+def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOParams):
 
     # Define a linear learning rate schedule
     def linear_schedule(count):
@@ -240,7 +279,7 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                     avg_length = jnp.mean(jnp.sum(done_until, axis=0))
                     print(
                         Fore.YELLOW
-                        + f"Step: {i:>6d}"
+                        + f"Iteration: {i:>6d}"
                         + Fore.GREEN
                         + f"\tAverage episode length: {avg_length:.2f}"
                         + "\t|\t"

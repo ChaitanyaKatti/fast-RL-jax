@@ -1,8 +1,8 @@
+import ppo
 from network import ActorCritic
-from ppo import make_train, PPOParams
-# from cartpole import CartPoleEnv as Env
+from cartpole import CartPoleEnv as Env
 # from copter2d import Copter2DEnv as Env
-from crazyflie import CrazyflieEnv as Env
+# from crazyflie import CrazyflieEnv as Env
 
 import jax
 import jax.numpy as jnp
@@ -21,7 +21,7 @@ def test(network_params):
 
     # Initialize the environment and parameters
     test_env = Env()
-    test_env_params = test_env.makeParams(num_agents=5, num_steps=100) # Same as training environment
+    test_env_params = test_env.make_params(num_agents=5, num_steps=100) # Same as training environment
 
     # Reset the environment
     key = jax.random.PRNGKey(0)
@@ -60,8 +60,8 @@ def test(network_params):
 
 if __name__ == "__main__":
     env = Env()
-    env_params = env.makeParams(num_agents=1024, num_steps=100)
-    ppo_params = PPOParams(
+    env_params = env.make_params(num_agents=1024, num_steps=100)
+    ppo_params = ppo.make_params(
         LR=6e-4,
         TOTAL_TIMESTEPS=50_000_000,
         NUM_AGENTS=env_params.num_agents,
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
     rng = jax.random.PRNGKey(0)
-    train = jax.jit(make_train(network, env, env_params, ppo_params))
+    train = jax.jit(ppo.make_train(network, env, env_params, ppo_params))
     out = train(rng)
 
     print(Fore.GREEN + Style.BRIGHT + Back.WHITE + "Training complete. Testing the agent...")
