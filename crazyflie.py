@@ -199,7 +199,7 @@ class CrazyflieEnv(Env):
         last_action = state.current_action  # Retrive the action from last step
         t = state.t + params.ctrl_dt  # Update time step for each agent
 
-        return state.replace(
+        return CrazyflieState(
             pos=pos,
             vel=vel,
             quat=quat,
@@ -229,8 +229,8 @@ class CrazyflieEnv(Env):
         state = lax.fori_loop(0, params.phy_steps_per_ctrl_step, lambda i, s: cls.crazyflie_single_step(s, action, params), state)
 
         return state.replace(
-            current_action=action,  # Update the current action
-            last_action=last_action,  # Keep the last action for reward calculation
+            current_action=action,      # Update the current action
+            last_action=last_action,    # Keep the last action for reward calculation
         )    
 
     @staticmethod
