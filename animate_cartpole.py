@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 import matplotlib.pyplot as plt
-from cartpole import CartPoleEnv, CartPoleParams
+from cartpole import CartPoleEnv
 from matplotlib.animation import FuncAnimation
 from pynput import keyboard
 from network import ActorCritic
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     listener.start()
 
     env = CartPoleEnv()
-    env_params = CartPoleParams(num_agents=10)
+    env_params = env.make_params(num_agents=10)
     network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
     rng = jax.random.PRNGKey(0)
     init_x = jnp.zeros(env.observation_space(env_params)[0].shape[0])

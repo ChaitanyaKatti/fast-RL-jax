@@ -263,7 +263,7 @@ class CrazyflieEnv(Env):
         pass
 
     @staticmethod
-    def makeParams(
+    def make_params(
         num_agents: int = 1,
         mass: float = 0.028, # 28g
         inertia: jnp.ndarray = jnp.array(

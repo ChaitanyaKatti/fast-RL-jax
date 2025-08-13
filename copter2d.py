@@ -143,7 +143,7 @@ class Copter2DEnv(Env):
         plt.grid(alpha=0.3)
 
     @staticmethod
-    def makeParams(
+    def make_params(
         num_agents: int = 1,
         mass: float = 1.0,
         inertia: float = 1.0,

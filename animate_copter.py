@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 import matplotlib.pyplot as plt
-from copter2d import Copter2DEnv, Copter2DParams
+from copter2d import Copter2DEnv
 from matplotlib.animation import FuncAnimation
 from pynput import keyboard
 from network import ActorCritic
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     listener.start()
 
     env = Copter2DEnv()
-    env_params = Copter2DParams(num_agents=1)
+    env_params = env.make_params(num_agents=1)
     network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
     rng = jax.random.PRNGKey(0)
     init_x = jnp.zeros(env.observation_space(env_params)[0].shape[0])

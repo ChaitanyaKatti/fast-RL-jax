@@ -154,7 +154,7 @@ class CartPoleEnv(Env):
         plt.grid(alpha=0.3)
 
     @staticmethod
-    def makeParams(
+    def make_params(
         num_agents: int = 1,
         m_c: float = 1.0,
         m_p: float = 0.1,

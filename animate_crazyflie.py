@@ -39,7 +39,7 @@ if __name__ == "__main__":
     listener.start()
 
     env = CrazyflieEnv()
-    env_params = env.makeParams(num_agents=2,phy_freq=50, ctrl_freq=50)
+    env_params = env.make_params(num_agents=2,phy_freq=50, ctrl_freq=50)
     network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
     rng = jax.random.PRNGKey(0)
     init_x = jnp.zeros(env.observation_space(env_params)[0].shape[0])
