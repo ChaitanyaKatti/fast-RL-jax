@@ -12,7 +12,7 @@ This project implements PPO from scratch using JAX for high-performance vectoriz
 - Vectorized environments for efficient training
 - Support for different network architectures
 
-## Examples
+## Examples (Trained in 15sec 50M timesteps, Nvidia 3060 laptop GPU)
 ### CartPole Environment Animation
 ![CartPole Animation](cartpole_animation.gif)
 
