@@ -12,6 +12,14 @@ This project implements PPO from scratch using JAX for high-performance vectoriz
 - Vectorized environments for efficient training
 - Support for different network architectures
 
+## Examples
+### CartPole Environment Animation
+![CartPole Animation](cartpole_animation.gif)
+
+### Copter2D Environment Animation
+![CartPole Animation](copter2d_animation.gif)
+
+
 ## Mathematical Foundation
 
 ### PPO Objective
