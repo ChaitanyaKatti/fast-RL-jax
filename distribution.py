@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
-from jax.scipy.special import gammaln
+from jax.scipy.special import betaln, digamma
+from jax.scipy.stats import norm
 
 class Distribution:
     def sample(self, key, sample_shape=()):
@@ -60,7 +61,7 @@ class MultivariateNormalDiag(Distribution):
 
     def entropy(self):
         k = self.event_shape[0]
-        return 0.5 * k * (jnp.log(2 * jnp.pi * jnp.e)) + jnp.sum(jnp.log(self.scale_diag), axis=-1)
+        return 0.5 * (jnp.log(2 * jnp.pi * jnp.e)) + jnp.mean(jnp.log(self.scale_diag), axis=-1) # Mean entropy per dimension
 
 class TanhMultivariateNormalDiag(MultivariateNormalDiag):
     def sample(self, key, sample_shape=()):
@@ -68,9 +69,9 @@ class TanhMultivariateNormalDiag(MultivariateNormalDiag):
         return jnp.tanh(samples)
 
     def log_prob(self, value):
-        # Apply inverse tanh transformation
+        value = jnp.clip(value, -0.999999, 0.999999) # Avoid log(0), arctanh(+/- 1) issues
         transformed_value = jnp.arctanh(value)
-        return super().log_prob(transformed_value) - jnp.sum(jnp.log(1 - jnp.square(value)), axis=-1)
+        return super().log_prob(transformed_value) - jnp.sum(jnp.log(1 - jnp.square(value) + 1e-6), axis=-1)
 
     def entropy(self):
         # No analytical entropy for tanh transformation, use Monte Carlo estimation
@@ -101,12 +102,51 @@ class TanhMultivariateNormalDiag(MultivariateNormalDiag):
         # Transform the samples
         z = self.loc[..., None] + self.scale_diag[..., None] * samples32
         # Compute the log of the absolute determinant of the Jacobian
-        log_abs_det_jacobians = jnp.log1p(-jnp.square(jnp.tanh(z)) + 1e-6)                  # Shape (minibatch_size, action_dim, num_samples)
-        # Average over the samples, sum over the action dimension
-        log_abs_det_jacobians = jnp.sum(jnp.mean(log_abs_det_jacobians, axis=-1), axis=-1)  # Shape (minibatch_size,)
+        log_abs_det_jacobians = jnp.log1p(-jnp.square(jnp.tanh(z)) + 1e-6)      # Shape (minibatch_size, action_dim, num_samples)
+        # Average over the samples, mean over the action dimension
+        log_abs_det_jacobians = jnp.mean(log_abs_det_jacobians, axis=(-1, -2))  # Shape (minibatch_size,)
         # Return the total entropy
         return super().entropy() + log_abs_det_jacobians
 
+
+class TruncatedMultivariateNormalDiag(MultivariateNormalDiag):
+    """
+    This distribution mimics the behaviour when resampling is used until the samples are within [-1, 1].
+    p ~ normaldist(mean, std) # Stadard Gaussian
+    q ~ normaldist(mean, std) / integral_{-1}^{1}{p(t)dt} # Normalized Truncated Gaussian, support=[-1,1]
+    """
+    def __init__(self, loc, scale_diag):
+        super().__init__(loc, scale_diag)
+        # Precompute the CDF values for the truncation points
+        self.cdf_m1 = norm.cdf(-1, loc=self.loc, scale=self.scale_diag)
+        self.cdf_p1 = norm.cdf(1, loc=self.loc, scale=self.scale_diag)
+        self.cdf_m1_to_p1 = self.cdf_p1 - self.cdf_m1
+
+    def sample(self, key, sample_shape=()):
+        """
+        Sample from the distribution uniformly in the range [-1, 1].
+        This is done by sampling from the CDF of the truncated normal distribution.
+        The CDF is computed as:
+        CDF(x) = (CDF(x) - CDF(-1)) / (CDF(1) - CDF(-1))
+        where CDF is the cumulative distribution function of the normal distribution.
+        The samples are then transformed using the inverse CDF (quantile function) of the normal distribution.
+        The samples are then clipped to [-1, 1] to ensure they are within the truncated range.
+        """
+        # Generate uniform random numbers
+        u = jax.random.uniform(key, shape=sample_shape + self.loc.shape)
+        cdf = self.cdf_m1 + u * (self.cdf_m1_to_p1)
+        samples = norm.ppf(cdf, loc=self.loc, scale=self.scale_diag)
+        return jnp.clip(samples, -1.0, 1.0)
+    
+    def log_prob(self, value):
+        """
+        Compute the log probability of the given value, considering the truncation.
+        """
+        return super().log_prob(value) - jnp.sum(jnp.log(self.cdf_m1_to_p1), axis=-1)
+
+    def entropy(self):
+        return jnp.mean(jnp.log(2*(1.0 - jnp.exp(-2 * self.scale_diag)))) # Very approximate entropy for truncated normal distribution
+    
 class BetaDistribution(Distribution):
     def __init__(self, alpha, beta):
         """
@@ -119,22 +159,24 @@ class BetaDistribution(Distribution):
         self.batch_shape = self.alpha.shape[:-1]
 
     def sample(self, key, sample_shape=()):
-        return jax.random.beta(key, self.alpha, self.beta, shape=sample_shape + self.batch_shape + self.event_shape)
+        return jax.random.beta(
+            key,
+            self.alpha,
+            self.beta,
+            shape=sample_shape + self.batch_shape + self.event_shape,
+        )
 
     def log_prob(self, value):
         return (
-            (self.alpha - 1) * jnp.log(value) +
-            (self.beta - 1) * jnp.log(1 - value) -
-            gammaln(self.alpha) -
-            gammaln(self.beta) +
-            gammaln(self.alpha + self.beta)
+            (self.alpha - 1) * jnp.log(value)
+            + (self.beta - 1) * jnp.log(1.0 - value)
+            - betaln(self.alpha, self.beta)
         )
 
     def entropy(self):
         return (
-            gammaln(self.alpha + self.beta) -
-            gammaln(self.alpha) -
-            gammaln(self.beta) +
-            (self.alpha - 1) * jnp.log(self.alpha / (self.alpha + self.beta)) +
-            (self.beta - 1) * jnp.log(self.beta / (self.alpha + self.beta))
+            betaln(self.alpha, self.beta)
+            - (self.alpha - 1) * digamma(self.alpha)
+            - (self.beta - 1) * digamma(self.beta)
+            + (self.alpha + self.beta - 2) * digamma(self.alpha + self.beta)
         )

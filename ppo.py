@@ -8,6 +8,7 @@ from env import Env, EnvParams
 from typing import Dict
 from colorama import Fore
 
+
 @dataclass
 class PPOParams:
     LR: float
@@ -30,6 +31,7 @@ class PPOParams:
     BATCH_SIZE: int     # To be calculated based on NUM_AGENTS and NUM_STEPS
     NUM_UPDATES: int    # To be calculated based on TOTAL_TIMESTEPS, NUM_STEPS, and NUM_AGENTS
     MINIBATCH_SIZE: int # To be calculated based on NUM_AGENTS, NUM_STEPS, and NUM_MINIBATCHES
+
 
 @dataclass
 class Transition:

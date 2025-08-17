@@ -1,8 +1,9 @@
 import jax.numpy as jnp
 import flax.linen as nn
 from flax.linen.initializers import orthogonal
-from distribution import Distribution, BetaDistribution, MultivariateNormalDiag, TanhMultivariateNormalDiag
+from distribution import Distribution, BetaDistribution, MultivariateNormalDiag, TanhMultivariateNormalDiag, TruncatedMultivariateNormalDiag
 from typing import Tuple
+
 
 class ActorCritic(nn.Module):
     action_dim: int
@@ -17,9 +18,16 @@ class ActorCritic(nn.Module):
         log_std = self.param("log_std", nn.initializers.constant(jnp.log(0.8744)), (self.action_dim,)) # State independent log std
         mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01))(actor)
         # log_std = nn.Dense(self.action_dim, kernel_init=orthogonal(jnp.log(0.8744)))(actor)  # State dependent log std
-        # pi = MultivariateNormalDiag(mean, jnp.exp(log_std))
-        pi = TanhMultivariateNormalDiag(mean, jnp.exp(log_std))
-        # pi = BetaDistribution(mean, jnp.exp(log_std))
+        pi = MultivariateNormalDiag(mean, jnp.exp(log_std))
+        # pi = TanhMultivariateNormalDiag(mean, jnp.exp(log_std))
+        # pi = TruncatedMultivariateNormalDiag(mean, jnp.exp(log_std)) # Truncated Normal distribution
+
+        # # Reparaemeterization for Beta distribution
+        # mu = nn.sigmoid(nn.Dense(self.action_dim, kernel_init=orthogonal(1))(actor))
+        # log_v = self.param("log_v", nn.initializers.constant(jnp.log(2.0)), (self.action_dim,))
+        # alpha = jnp.clip(mu * jnp.exp(log_v), 1e-5, None)
+        # beta  = jnp.clip((1 - mu) * jnp.exp(log_v), 1e-5, None)
+        # pi = BetaDistribution(alpha, beta)
 
         # Critic network
         critic = nn.tanh(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(x))

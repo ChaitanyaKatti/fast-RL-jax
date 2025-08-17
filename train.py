@@ -11,6 +11,7 @@ from colorama import Fore, Style, Back
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+jax.config.update("jax_debug_nans", True)
 jax.default_device(jax.devices('cuda')[0])
 colorama.init(autoreset=True)
 
@@ -62,8 +63,8 @@ if __name__ == "__main__":
     env = Env()
     env_params = env.make_params(num_agents=1024, num_steps=100)
     ppo_params = ppo.make_params(
-        LR=6e-4,
-        TOTAL_TIMESTEPS=50_000_000,
+        LR=3e-4,
+        TOTAL_TIMESTEPS=100_000_000,
         NUM_AGENTS=env_params.num_agents,
         NUM_STEPS=env_params.num_steps,  # 100
         NUM_MINIBATCHES=64,
@@ -72,7 +73,7 @@ if __name__ == "__main__":
         CLIP_VALUE=1.0,
         CLIP_EPS=0.2,
         EPOCHS=4,
-        ENT_COEF=0.01,
+        ENT_COEF=0.05,
         DEBUG=True,
     )
 
