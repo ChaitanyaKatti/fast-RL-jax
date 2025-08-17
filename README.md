@@ -214,3 +214,10 @@ result = train_fn(jax.random.PRNGKey(0))
 - [ ] Adaptive clipping parameters
 - [ ] Reward Constrained Policy Optimization (RCPO) integration
 - [ ] Crazyflie drone control example
+- [ ] Equivariant Reinforcement Learning for Quadrotor UAV 
+
+## References
+- [PPO Paper](https://arxiv.org/abs/1707.06347)
+- [SPO Paper](https://arxiv.org/abs/2401.16025)
+- [JAX Documentation](https://jax.readthedocs.io/en/latest/)
+- [purejaxrl](https://github.com/ChaitanyaKatti/fast-RL-jax)
