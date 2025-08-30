@@ -1,9 +1,12 @@
 from flax import struct
 import jax.numpy as jnp
-from jax import lax, random
+import jax
+from jax import lax, random, jit
 from env import Env, EnvParams, EnvState
 from typing import Tuple
-
+from renderer.renderer import DroneRenderer
+import numpy as np
+from functools import partial
 
 @struct.dataclass
 class CrazyflieParams(EnvParams):
@@ -65,12 +68,14 @@ class CrazyflieState(EnvState):
 
 
 class CrazyflieEnv(Env):
+    renderer: DroneRenderer = None
+
     @classmethod
     def reset(cls, key: jnp.ndarray, params: CrazyflieParams):
-        pos_rand_mag = params.pos_threshold             # Random position magnitude for initial state
-        quat_rand_mag = jnp.array([0.1, 0.1, 0.1, 0.1]) # Small random quaternion for initial state
-        vel_rand_mag = jnp.array([0.1, 0.1, 0.1])       # Small random velocity for initial state
-        ang_vel_rand_mag = jnp.array([0.1, 0.1, 0.1])   # Small random angular velocity for initial state
+        pos_rand_mag = 0.8*params.pos_threshold             # Random position magnitude for initial state
+        quat_rand_mag = 0*jnp.array([0.0, 0.1, 0.1, 0.1]) # Small random quaternion for initial state
+        vel_rand_mag = 0*jnp.array([0.1, 0.1, 0.1])       # Small random velocity for initial state
+        ang_vel_rand_mag = 0*jnp.array([0.1, 0.1, 0.1])   # Small random angular velocity for initial state
 
         key1, key2, key3, key4 = random.split(key, 4)
         pos = random.uniform(key1, (params.num_agents, 3), minval=-pos_rand_mag, maxval=pos_rand_mag)
@@ -78,6 +83,8 @@ class CrazyflieEnv(Env):
         quat = random.uniform(key3, (params.num_agents, 4), minval=-quat_rand_mag, maxval=quat_rand_mag)
         ang_vel = random.uniform(key4, (params.num_agents, 3), minval=-ang_vel_rand_mag, maxval=ang_vel_rand_mag)
 
+        # Set w component to 1
+        quat = quat.at[..., 0].set(1.0)  # Set the 1st component to 1
         quat = quat / jnp.linalg.norm(quat, axis=-1, keepdims=True)  # Normalize quaternion
         rot_mat = cls.quat_to_rot_mat(quat) # Shape: (num_agents, 3, 3)
 
@@ -104,6 +111,7 @@ class CrazyflieEnv(Env):
         return obs, state
 
     @classmethod
+    @partial(jit, static_argnames=('cls'))
     def step(cls, key: jnp.ndarray, state: CrazyflieState, action: jnp.ndarray, params: CrazyflieParams):
         next_state = cls.crazyflie_step(state, action, params)
         obs = cls.observation(next_state, params)
@@ -141,7 +149,7 @@ class CrazyflieEnv(Env):
         return low, high
 
     @classmethod
-    def crazyflie_single_step(cls, state: CrazyflieState, action: jnp.ndarray, params: CrazyflieParams):
+    def crazyflie_single_step(cls, state: CrazyflieState, action: jnp.ndarray, params: CrazyflieParams) -> CrazyflieState:
         """
         Perform a single step of the Crazyflie environment.
         """
@@ -159,8 +167,8 @@ class CrazyflieEnv(Env):
         #         M3(CCW)   M2(CW)
 
         # PWM from rate_controller
-        pwm, rate_error_sum = cls.rate_controller(state, action, params)                                           # Shape (num_agents, 4)
-        pwm = (1.0-params.motor_alpha) * state.pwm + params.motor_alpha * pwm # PWM Motor smoothing,    # Shape (num_agents, 4)
+        pwm, rate_error_sum = cls.rate_controller(state, action, params)                                # Shape (num_agents, 4)
+        pwm = (1.0 - params.motor_alpha) * state.pwm + params.motor_alpha * pwm # PWM Motor smoothing,    # Shape (num_agents, 4)
 
         # Thrust for each motor
         motor_thurst = (
@@ -168,7 +176,7 @@ class CrazyflieEnv(Env):
             + params.thurst_coeff_b * pwm
             + params.thurst_coeff_c
         )  # Shape (num_agents, 4)
-        total_thrust, torque_x, torque_y, torque_z = (motor_thurst @ params.phy_mix.T).T
+        total_thrust, torque_x, torque_y, torque_z = jnp.einsum('ij,nj->ni', params.phy_mix, motor_thurst).T
         total_thrust = total_thrust.reshape(-1, 1)  # Shape (num_agents, 1)
         torques = jnp.stack([torque_x, torque_y, torque_z], axis=-1)  # Shape (num_agents, 3)
 
@@ -185,9 +193,9 @@ class CrazyflieEnv(Env):
         up = jnp.array([0.0, 0.0, 1.0])
         acc = jnp.einsum('nij,nj->ni', state.rot_mat, (total_thrust * up - drags))/params.mass - params.g*up        # Shape (num_agents, 3)
         # Local Angular Acceleration
-        I_omega = jnp.einsum('ij,nj->ni', params.inertia, state.ang_vel)                # Shape (num_agents,3)
-        cross = jnp.cross(state.ang_vel, I_omega)                                       # Shape (num_agents,3)
-        angular_acc = jnp.einsum('ij,nj->ni', params.inertia_inv, (torques - cross))    # Shape (num_agents,3)
+        # I_omega = jnp.einsum('ij,nj->ni', params.inertia, state.ang_vel)                # Shape (num_agents,3)
+        # cross = jnp.cross(state.ang_vel, I_omega)                                       # Shape (num_agents,3)
+        angular_acc = jnp.einsum('ij,nj->ni', params.inertia_inv, (torques))    # Shape (num_agents,3)
 
         # Update state
         ang_vel = state.ang_vel + angular_acc * params.ctrl_dt                          # Shape (num_agents, 3)
@@ -197,8 +205,10 @@ class CrazyflieEnv(Env):
         rot_mat = cls.quat_to_rot_mat(quat)                                             # Shape (num_agents, 3, 3)
         current_action = action             # Store the new action
         last_action = state.current_action  # Retrive the action from last step
-        t = state.t + params.ctrl_dt  # Update time step for each agent
-
+        t = state.t + params.ctrl_dt        # Update time step for each agent
+        # jax.debug.print("Pos: {} Vel: {} Acc: {} Action: {}", pos[0], vel[0], acc[0], action[0])
+        # jax.debug.print("Ang Vel: {} Ang Acc: {} Torque: {} PWM: {}", ang_vel[0], angular_acc[0], torques[0], pwm[0])
+        # jax.debug.print("Quat: {} Rot Mat: {}", quat[0], rot_mat[0])
         return CrazyflieState(
             pos=pos,
             vel=vel,
@@ -229,16 +239,16 @@ class CrazyflieEnv(Env):
         state = lax.fori_loop(0, params.phy_steps_per_ctrl_step, lambda i, s: cls.crazyflie_single_step(s, action, params), state)
 
         return state.replace(
-            current_action=action,      # Update the current action
-            last_action=last_action,    # Keep the last action for reward calculation
+            last_action=last_action,    # Revert to the last action at the begining of the substeps
         )    
 
     @staticmethod
     def reward(state: CrazyflieState, params: CrazyflieParams) -> jnp.ndarray:
-        return (
-            1.0                                                                     # Reward to stay alive
-            - jnp.linalg.norm(state.pos, axis=1) / params.pos_threshold[0]          # Reward based on distance to origin
-            - jnp.linalg.norm(state.current_action - state.last_action, axis=-1)    # Reward for smooth actions
+        return jnp.clip(
+            1.0                                                                         # Reward to stay alive
+            - jnp.linalg.norm(state.pos, axis=-1)                                       # Reward based on distance to origin
+            - 0.1*jnp.linalg.norm(state.current_action - state.last_action, axis=-1),    # Reward for smooth actions 
+            -1.0, 1.0
         )
 
     @staticmethod
@@ -256,11 +266,30 @@ class CrazyflieEnv(Env):
             state.last_action,
         ], axis=-1)
 
-    @staticmethod
-    def render(state: CrazyflieState, params: CrazyflieParams):
-        # This function is a placeholder for rendering the Crazyflie environment.
-        # You can implement your own rendering logic here, such as using matplotlib or any other visualization library.
-        pass
+    # @staticmethod
+    def render(self, state: CrazyflieState, params: CrazyflieParams):
+        if self.renderer is None:
+            print("Initializing renderer...")
+            self.renderer = DroneRenderer()
+
+        if self.renderer.should_close():
+            print("Closing renderer...")
+            self.renderer.cleanup()
+        
+        else:
+            position = np.array(state.pos[0])
+            rotation = np.array(state.rot_mat[0])
+            debug_info = {
+                'Pos': np.round(state.pos[0], 2),
+                'Vel': np.round(state.vel[0], 2),
+                'Quat': np.round(state.quat[0], 2),
+                'Ang Vel': np.round(state.ang_vel[0], 2),
+                'PWM': np.round(state.pwm[0], 1),
+                'Error Sum': np.round(state.rate_error_sum[0], 2),
+                'Action': np.round(state.current_action[0], 2),
+                'Time': np.round(state.t[0], 2),
+            }
+            self.renderer.render(position, rotation, state.t[0], debug_info=None)
 
     @staticmethod
     def make_params(
@@ -268,20 +297,20 @@ class CrazyflieEnv(Env):
         mass: float = 0.028, # 28g
         inertia: jnp.ndarray = jnp.array(
             [
-                [16.655602, -0.830806,   1.800197],
-                [-0.830806, 16.571710,  -0.718277],
-                [ 1.800197,  -0.718277, 29.261652],
+                [16.655602 * 1e-6, -0.830806 * 1e-6,   1.800197 * 1e-6],
+                [-0.830806 * 1e-6, 16.571710 * 1e-6,  -0.718277 * 1e-6],
+                [ 1.800197 * 1e-6, -0.718277 * 1e-6,  29.261652 * 1e-6],
             ]
         ),
         arm_length: float = 0.045, # 4.5cm
         g: float = 9.8,
         PWM_MAX: int = 65535,
-        rate_center=jnp.array([200.0, 200.0, 200.0]),
-        rate_max=jnp.array([670.0, 670.0, 670.0]),
+        rate_center=0.2*jnp.array([200.0, 200.0, 200.0]),
+        rate_max=0.2*jnp.array([670.0, 670.0, 670.0]),
         rate_expo=jnp.array([0.54, 0.54, 0.54]),
-        P_GAIN=jnp.array([3800, 3800, 7600]),
+        P_GAIN=jnp.array([1800, 1800, 2800]),
         I_GAIN=jnp.array([1200, 1200, 2400]),
-        ERROR_SUM_MAX=jnp.array([0.5, 0.5, 0.1]),
+        ERROR_SUM_MAX=jnp.array([0.1, 0.1, 0.05]),
         thurst_coeff_a: float = 2.130295e-11,
         thurst_coeff_b: float = 1.032633e-6,
         thurst_coeff_c: float = 5.484560e-4,
@@ -402,7 +431,9 @@ class CrazyflieEnv(Env):
                 [-1.0,  1.0, -1.0,  1.0],   # Yaw torque
             ]
         )
-        pwm = jnp.concatenate([desired_thrust[:, None], control], axis=-1) @ ctrl_mixer.T
+        thrust_torque = jnp.concatenate([desired_thrust[:, None], control], axis=-1)  # Shape (num_agents, 4)
+        # Apply the mixer matrix to get PWM values
+        pwm = jnp.einsum('ij,ni->nj', ctrl_mixer, thrust_torque)  # Shape (num_agents, 4)
         pwm = jnp.clip(pwm, 0, params.PWM_MAX)  # Shape (num_agents, 4)
 
         return pwm, rate_error_sum
