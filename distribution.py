@@ -60,8 +60,8 @@ class MultivariateNormalDiag(Distribution):
         )
 
     def entropy(self):
-        k = self.event_shape[0]
         return 0.5 * (jnp.log(2 * jnp.pi * jnp.e)) + jnp.mean(jnp.log(self.scale_diag), axis=-1) # Mean entropy per dimension
+
 
 class TanhMultivariateNormalDiag(MultivariateNormalDiag):
     def sample(self, key, sample_shape=()):
@@ -117,7 +117,7 @@ class TruncatedMultivariateNormalDiag(MultivariateNormalDiag):
     """
     def __init__(self, loc, scale_diag):
         super().__init__(loc, scale_diag)
-        # Precompute the CDF values for the truncation points
+        # Precompute the CDF values for the truncation
         self.cdf_m1 = norm.cdf(-1, loc=self.loc, scale=self.scale_diag)
         self.cdf_p1 = norm.cdf(1, loc=self.loc, scale=self.scale_diag)
         self.cdf_m1_to_p1 = self.cdf_p1 - self.cdf_m1
@@ -133,11 +133,10 @@ class TruncatedMultivariateNormalDiag(MultivariateNormalDiag):
         The samples are then clipped to [-1, 1] to ensure they are within the truncated range.
         """
         # Generate uniform random numbers
-        u = jax.random.uniform(key, shape=sample_shape + self.loc.shape)
-        cdf = self.cdf_m1 + u * (self.cdf_m1_to_p1)
+        cdf = jax.random.uniform(key, shape=sample_shape + self.loc.shape, minval=self.cdf_m1, maxval=self.cdf_p1)
         samples = norm.ppf(cdf, loc=self.loc, scale=self.scale_diag)
         return jnp.clip(samples, -1.0, 1.0)
-    
+
     def log_prob(self, value):
         """
         Compute the log probability of the given value, considering the truncation.
@@ -146,7 +145,8 @@ class TruncatedMultivariateNormalDiag(MultivariateNormalDiag):
 
     def entropy(self):
         return jnp.mean(jnp.log(2*(1.0 - jnp.exp(-2 * self.scale_diag)))) # Very approximate entropy for truncated normal distribution
-    
+
+
 class BetaDistribution(Distribution):
     def __init__(self, alpha, beta):
         """
