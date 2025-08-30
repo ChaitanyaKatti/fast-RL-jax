@@ -14,15 +14,22 @@ class ActorCritic(nn.Module):
         actor = nn.tanh(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(x))
         actor = nn.tanh(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(actor))
 
-        # Tanh Entropy is maximized when std=0.8744 and mean=0, so we use this values to initialize
-        log_std = self.param("log_std", nn.initializers.constant(jnp.log(0.8744)), (self.action_dim,)) # State independent log std
+        # Normal Distribution
         mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01))(actor)
-        # log_std = nn.Dense(self.action_dim, kernel_init=orthogonal(jnp.log(0.8744)))(actor)  # State dependent log std
+        log_std = self.param("log_std", nn.initializers.constant(jnp.log(1.0)), (self.action_dim,)) # State independent log std
         pi = MultivariateNormalDiag(mean, jnp.exp(log_std))
+        
+        # # Tanh Normal Distrbution | Entropy is maximized when std=0.8744 and mean=0, so we use this values to initialize
+        # log_std = self.param("log_std", nn.initializers.constant(jnp.log(0.8744)), (self.action_dim,)) # State independent log std
+        # mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01))(actor)
         # pi = TanhMultivariateNormalDiag(mean, jnp.exp(log_std))
-        # pi = TruncatedMultivariateNormalDiag(mean, jnp.exp(log_std)) # Truncated Normal distribution
 
-        # # Reparaemeterization for Beta distribution
+        # # Truncated Normal distribution | Mean is not really a mean, but a location parameter
+        # log_std = self.param("log_std", nn.initializers.constant(jnp.log(0.8744)), (self.action_dim,)) # State independent log std
+        # loc = nn.tanh(nn.Dense(self.action_dim, kernel_init=orthogonal(0.01))(actor))
+        # pi = TruncatedMultivariateNormalDiag(loc, jnp.exp(log_std)) 
+        
+        # # Beta Distribution | Reparaemeterization for alpha and beta parameters 
         # mu = nn.sigmoid(nn.Dense(self.action_dim, kernel_init=orthogonal(1))(actor))
         # log_v = self.param("log_v", nn.initializers.constant(jnp.log(2.0)), (self.action_dim,))
         # alpha = jnp.clip(mu * jnp.exp(log_v), 1e-5, None)

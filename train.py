@@ -1,7 +1,7 @@
 import ppo
 from network import ActorCritic
-# from cartpole import CartPoleEnv as Env
-from copter2d import Copter2DEnv as Env
+from cartpole import CartPoleEnv as Env
+# from copter2d import Copter2DEnv as Env
 # from crazyflie import CrazyflieEnv as Env
 
 import jax
@@ -35,17 +35,17 @@ def test(network_params, save_gif=True, gif_filename="agent_test.gif", max_frame
     total_reward = jnp.zeros(test_env_params.num_agents)
 
     fig, ax = plt.subplots(figsize=(16, 6))
-    
+
     # Track frame count for GIF length control
     frame_count = 0
 
     def animate(i):
         nonlocal key, state, obs, network, network_params, total_reward, frame_count
-        
+
         # Stop animation after max_frames for GIF
         if save_gif and frame_count >= max_frames:
             return
-            
+
         if i % test_env_params.num_steps == 0:
             key, sub_key = jax.random.split(key, 2)
             obs, state = test_env.reset(sub_key, test_env_params)
@@ -63,13 +63,13 @@ def test(network_params, save_gif=True, gif_filename="agent_test.gif", max_frame
 
         ax.clear()
         test_env.render(state, test_env_params)
-        
+
         frame_count += 1
 
     # Create animation
-    ani = FuncAnimation(fig, animate, frames=max_frames if save_gif else None, 
+    ani = FuncAnimation(fig, animate, frames=max_frames if save_gif else None,
                        interval=50, cache_frame_data=False, repeat=False)
-    
+
     if save_gif:
         print(f"Saving GIF to {gif_filename}...")
         # Save as GIF using PillowWriter
@@ -93,21 +93,22 @@ if __name__ == "__main__":
         CLIP_VALUE=1.0,
         CLIP_EPS=0.2,
         EPOCHS=4,
-        ENT_COEF=0.05,
+        ENT_COEF=0.01, # For Gaussian Distribution
+        # ENT_COEF=0.05, # For Tanh Gaussian Distribution
         DEBUG=True,
     )
 
     network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.PRNGKey(60)
     train = jax.jit(ppo.make_train(network, env, env_params, ppo_params))
     out = train(rng)
 
     print(Fore.GREEN + Style.BRIGHT + Back.WHITE + "Training complete. Testing the agent...")
 
     network_params = out['train_state'].params
-    
+
     # Save as GIF
-    test(network_params, save_gif=True, gif_filename="trained_agent.gif", max_frames=300)
-    
+    # test(network_params, save_gif=True, gif_filename="trained_agent.gif", max_frames=300)
+
     # Or display live (comment out the line above and uncomment below)
-    # test(network_params, save_gif=False)
+    test(network_params, save_gif=False)
