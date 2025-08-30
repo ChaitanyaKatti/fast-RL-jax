@@ -55,7 +55,7 @@ def test(network_params, save_gif=True, gif_filename="agent_test.gif", max_frame
         pi, _ = network.apply(network_params, obs)
         key, _key = jax.random.split(key)
         # actions = pi.sample(key) # Sample actions from the policy
-        actions = pi.loc # Deterministic actions
+        actions = pi.sample_deterministic() # Deterministic actions
 
         step_keys = jax.random.split(key, test_env_params.num_agents)
         obs, state, reward, terminated, info = test_env.step(step_keys, state, actions, test_env_params)

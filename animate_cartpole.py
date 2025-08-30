@@ -40,10 +40,11 @@ if __name__ == "__main__":
 
     def animate(i):
         global key, state, action, obs, network, network_params, total_reward
-        # pi, _ = network.apply(network_params, obs)
-        # key, _key = random.split(key)
-        # actions = pi.sample(_key)
-        actions = jnp.array([action] * env_params.num_agents)
+        pi, _ = network.apply(network_params, obs)
+        key, _key = random.split(key)
+        actions = pi.sample(_key)
+        # actions = pi.sample_deterministic()  # Deterministic actions
+        # actions = jnp.array([action] * env_params.num_agents)
 
         step_keys = random.split(key, env_params.num_agents)
         obs, state, reward, terminated, info = env.step(step_keys, state, actions, env_params)

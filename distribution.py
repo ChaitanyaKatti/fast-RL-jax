@@ -4,19 +4,26 @@ from jax.scipy.special import betaln, digamma
 from jax.scipy.stats import norm
 
 class Distribution:
-    def sample(self, key, sample_shape=()):
+    def sample(self, key):
         """
         Sample from the distribution.
 
         Args:
             key (jnp.ndarray): PRNGKey
-            sample_shape (tuple): tuple of leading sample dimensions
-
         Returns:
-            samples of shape sample_shape + batch_shape + event_shape
+            samples of shape batch_shape + event_shape
         """
         raise NotImplementedError("Subclasses should implement this method.")
 
+    def sample_deterministic(self):
+        """
+        Returns the mode or mean of the distribution.
+
+        Returns:
+            samples of shape batch_shape + event_shape
+        """
+        raise NotImplementedError("Subclasses should implement this method.")
+    
     def log_prob(self, value):
         """
         Compute the log probability of the given value.
@@ -46,10 +53,13 @@ class MultivariateNormalDiag(Distribution):
         self.event_shape = self.loc.shape[-1:]      # Shape (k,)
         self.batch_shape = self.loc.shape[:-1]      # Shape (...)
 
-    def sample(self, key, sample_shape=()):
-        eps = jax.random.normal(key, shape=sample_shape + self.loc.shape)
+    def sample(self, key):
+        eps = jax.random.normal(key, shape=self.loc.shape)
         return self.loc + eps * self.scale_diag
 
+    def sample_deterministic(self):
+        return self.loc
+    
     def log_prob(self, value):
         k = self.event_shape[0]
         diff = (value - self.loc) / self.scale_diag
@@ -64,9 +74,12 @@ class MultivariateNormalDiag(Distribution):
 
 
 class TanhMultivariateNormalDiag(MultivariateNormalDiag):
-    def sample(self, key, sample_shape=()):
-        samples = super().sample(key, sample_shape)
+    def sample(self, key):
+        samples = super().sample(key)
         return jnp.tanh(samples)
+
+    def sample_deterministic(self):
+        return jnp.tanh(self.loc)
 
     def log_prob(self, value):
         value = jnp.clip(value, -0.999999, 0.999999) # Avoid log(0), arctanh(+/- 1) issues
@@ -122,7 +135,7 @@ class TruncatedMultivariateNormalDiag(MultivariateNormalDiag):
         self.cdf_p1 = norm.cdf(1, loc=self.loc, scale=self.scale_diag)
         self.cdf_m1_to_p1 = self.cdf_p1 - self.cdf_m1
 
-    def sample(self, key, sample_shape=()):
+    def sample(self, key):
         """
         Sample from the distribution uniformly in the range [-1, 1].
         This is done by sampling from the CDF of the truncated normal distribution.
@@ -133,10 +146,13 @@ class TruncatedMultivariateNormalDiag(MultivariateNormalDiag):
         The samples are then clipped to [-1, 1] to ensure they are within the truncated range.
         """
         # Generate uniform random numbers
-        cdf = jax.random.uniform(key, shape=sample_shape + self.loc.shape, minval=self.cdf_m1, maxval=self.cdf_p1)
+        cdf = jax.random.uniform(key, shape=self.loc.shape, minval=self.cdf_m1, maxval=self.cdf_p1)
         samples = norm.ppf(cdf, loc=self.loc, scale=self.scale_diag)
         return jnp.clip(samples, -1.0, 1.0)
 
+    def sample_deterministic(self):
+        return jnp.clip(self.loc, -1.0, 1.0)
+    
     def log_prob(self, value):
         """
         Compute the log probability of the given value, considering the truncation.
@@ -158,12 +174,12 @@ class BetaDistribution(Distribution):
         self.event_shape = self.alpha.shape[-1:]
         self.batch_shape = self.alpha.shape[:-1]
 
-    def sample(self, key, sample_shape=()):
+    def sample(self, key):
         return jax.random.beta(
             key,
             self.alpha,
             self.beta,
-            shape=sample_shape + self.batch_shape + self.event_shape,
+            shape=self.batch_shape + self.event_shape,
         )
 
     def log_prob(self, value):
@@ -180,3 +196,29 @@ class BetaDistribution(Distribution):
             - (self.beta - 1) * digamma(self.beta)
             + (self.alpha + self.beta - 2) * digamma(self.alpha + self.beta)
         )
+
+
+class CategoricalDistribution(Distribution):
+    def __init__(self, logits):
+        """
+        logits: tensor of shape (..., k) where k is the number of categories
+        """
+        self.logits = jnp.asarray(logits)
+        self.event_shape = self.logits.shape[-1:]
+        self.batch_shape = self.logits.shape[:-1]
+        self.probs = jax.nn.softmax(self.logits, axis=-1)
+
+    def sample(self, key):
+        subkey, _ = jax.random.split(key)
+        samples = jax.random.categorical(subkey, self.logits, shape=self.batch_shape)
+        return samples
+
+    def sample_deterministic(self):
+        return jnp.argmax(self.logits, axis=-1)
+
+    def log_prob(self, value):
+        one_hot = jax.nn.one_hot(value, self.event_shape[0])
+        return jnp.sum(one_hot * jax.nn.log_softmax(self.logits, axis=-1), axis=-1)
+
+    def entropy(self):
+        return -jnp.sum(self.probs * jax.nn.log_softmax(self.logits, axis=-1), axis=-1)
