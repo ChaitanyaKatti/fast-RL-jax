@@ -1,10 +1,11 @@
 import jax
 import jax.numpy as jnp
 from jax import random
-from crazyflie import CrazyflieEnv, CrazyflieParams, CrazyflieState
 from pynput import keyboard
 from pynput.keyboard import Key, KeyCode
-from network import ActorCritic
+
+from zoo import CrazyflieEnv
+from rl import ActorCritic
 
 def on_press(key):
     global action

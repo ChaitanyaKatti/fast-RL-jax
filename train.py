@@ -1,8 +1,9 @@
-import ppo
-from network import ActorCritic
-from cartpole import CartPoleEnv as Env
-# from copter2d import Copter2DEnv as Env
-# from crazyflie import CrazyflieEnv as Env
+from rl import ppo
+from rl import ActorCritic, CNNActorCritic
+# from zoo import CartPoleEnv as Env
+# from zoo import Copter2DEnv as Env
+# from zoo import CrazyflieEnv as Env
+from zoo import MazeEnv as Env
 
 import jax
 import jax.numpy as jnp
@@ -15,21 +16,21 @@ jax.config.update("jax_debug_nans", True)
 jax.default_device(jax.devices('cuda')[0])
 colorama.init(autoreset=True)
 
-def test(network_params, save_gif=True, gif_filename="agent_test.gif", max_frames=500):
+def test(network_params, save_gif=False, gif_filename="agent_test.gif", max_frames=500):
     cpu = jax.devices('cpu')[0]
     jax.default_device(cpu)
     network_params = jax.tree.map(lambda x: jax.device_put(x, cpu), network_params)
 
     # Initialize the environment and parameters
     test_env = Env()
-    test_env_params = test_env.make_params(num_agents=5, num_steps=100) # Same as training environment
+    test_env_params = test_env.make_params(num_agents=1, num_steps=200) # Same as training environment
 
     # Reset the environment
     key = jax.random.PRNGKey(0)
     obs, state = test_env.reset(key, test_env_params)
 
     # Initialize the network
-    network = ActorCritic(action_dim=test_env.action_space(test_env_params)[0].shape[0])
+    network = CNNActorCritic(action_dim=test_env.action_space(test_env_params)[0].shape[0])
 
     # Initialize total reward
     total_reward = jnp.zeros(test_env_params.num_agents)
@@ -68,7 +69,7 @@ def test(network_params, save_gif=True, gif_filename="agent_test.gif", max_frame
 
     # Create animation
     ani = FuncAnimation(fig, animate, frames=max_frames if save_gif else None,
-                       interval=50, cache_frame_data=False, repeat=False)
+                       interval=1000*env_params.dt, cache_frame_data=False, repeat=False)
 
     if save_gif:
         print(f"Saving GIF to {gif_filename}...")
@@ -81,26 +82,25 @@ def test(network_params, save_gif=True, gif_filename="agent_test.gif", max_frame
 
 if __name__ == "__main__":
     env = Env()
-    env_params = env.make_params(num_agents=1024, num_steps=100)
+    env_params = env.make_params(num_agents=64, num_steps=150)
     ppo_params = ppo.make_params(
         LR=3e-4,
-        TOTAL_TIMESTEPS=50_000_000,
+        TOTAL_TIMESTEPS=1_000_000,
         NUM_AGENTS=env_params.num_agents,
         NUM_STEPS=env_params.num_steps,  # 100
         NUM_MINIBATCHES=64,
         ANNEAL_LR=False,
-        MAX_GRAD_NORM=1.0,
-        CLIP_VALUE=1.0,
-        CLIP_EPS=0.2,
-        EPOCHS=4,
-        ENT_COEF=0.01, # For Gaussian Distribution
+        # MAX_GRAD_NORM=1.0,
+        # CLIP_VALUE=1.0,
+        # CLIP_EPS=0.2,
+        # EPOCHS=4,
+        ENT_COEF=0.01,
         # ENT_COEF=0.05, # For Tanh Gaussian Distribution
         DEBUG=True,
     )
 
-    network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
-    rng = jax.random.PRNGKey(60)
-    train = jax.jit(ppo.make_train(network, env, env_params, ppo_params))
+    rng = jax.random.PRNGKey(0)
+    train = jax.jit(ppo.make_train(CNNActorCritic, env, env_params, ppo_params))
     out = train(rng)
 
     print(Fore.GREEN + Style.BRIGHT + Back.WHITE + "Training complete. Testing the agent...")
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     network_params = out['train_state'].params
 
     # Save as GIF
-    # test(network_params, save_gif=True, gif_filename="trained_agent.gif", max_frames=300)
+    # test(network_params, save_gif=True, gif_filename="./misc/agent_test.gif", max_frames=300)
 
     # Or display live (comment out the line above and uncomment below)
-    test(network_params, save_gif=False)
+    test(network_params)

@@ -221,4 +221,4 @@ class CategoricalDistribution(Distribution):
         return jnp.sum(one_hot * jax.nn.log_softmax(self.logits, axis=-1), axis=-1)
 
     def entropy(self):
-        return -jnp.sum(self.probs * jax.nn.log_softmax(self.logits, axis=-1), axis=-1)
+        return -jnp.mean(self.probs * jax.nn.log_softmax(self.logits, axis=-1), axis=-1)

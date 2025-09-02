@@ -1,8 +1,8 @@
 from flax import struct
 import jax.numpy as jnp
 from jax import random, vmap
-from env import Env, EnvParams, EnvState
 import matplotlib.pyplot as plt
+from rl import Env, EnvParams, EnvState
 
 @struct.dataclass
 class CartPoleParams(EnvParams):
@@ -145,6 +145,9 @@ class CartPoleEnv(Env):
             # Draw axle
             plt.plot(cart_x, cart_y, 'ko', markersize=6, alpha=0.6)
 
+        # Add text
+        plt.text(-3.5, 1.0, f'Time: {state.physics[0, -1]:.2f}s', fontsize=12)
+        
         plt.xlim(-4, 4)
         plt.ylim(-1.5, 1.5)
         plt.gca().set_aspect('equal')

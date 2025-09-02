@@ -17,6 +17,10 @@ class EnvState:
     """
 
 class Env:
+    """
+    Base class for reinforcement learning environments.
+    Contains methods that don't have any side effects and can be jitted with JAX. 
+    """
     @classmethod
     def step(cls, key: jnp.ndarray, state:EnvState, action: jnp.ndarray, params:EnvParams) -> Tuple[jnp.ndarray, EnvState, jnp.ndarray, jnp.ndarray, dict]:
         """

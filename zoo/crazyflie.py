@@ -1,12 +1,12 @@
 from flax import struct
 import jax.numpy as jnp
-import jax
 from jax import lax, random, jit
-from env import Env, EnvParams, EnvState
 from typing import Tuple
-from renderer.renderer import DroneRenderer
 import numpy as np
 from functools import partial
+
+from rl import Env, EnvParams, EnvState
+from .cfrenderer import DroneRenderer
 
 @struct.dataclass
 class CrazyflieParams(EnvParams):
@@ -45,6 +45,7 @@ class CrazyflieParams(EnvParams):
     ctrl_freq: int                  # Control loop frequency
     ctrl_dt: float                  # Control loop time step
     phy_steps_per_ctrl_step: int    # Number of physics steps per control step
+    dt: float                       # Used for rendering only
 
     pos_threshold: jnp.ndarray  # Position at which the episode terminates      # Shape (3,)
     num_steps: int              # Time limit for the episode in steps
@@ -374,6 +375,7 @@ class CrazyflieEnv(Env):
             ctrl_freq=ctrl_freq,
             ctrl_dt=ctrl_time_step,
             phy_steps_per_ctrl_step=phy_steps_per_ctrl_step,
+            dt=ctrl_freq,
             pos_threshold=pos_threshold,
             num_steps=num_steps,
             phy_mix=phy_mix

@@ -1,8 +1,9 @@
 from flax import struct
 import jax.numpy as jnp
 from jax import random, vmap
-from env import Env, EnvParams, EnvState
 import matplotlib.pyplot as plt
+
+from rl import Env, EnvParams, EnvState
 
 @struct.dataclass
 class Copter2DParams(EnvParams):
@@ -133,6 +134,9 @@ class Copter2DEnv(Env):
             plt.plot(x + cosl, y + sinl, "bo", markersize=5, alpha=0.6)
             # Vertial
             plt.plot([x, x - sinl], [y, y + cosl], 'g-', linewidth=2, alpha=0.6)
+
+        # Add text
+        plt.text(-2.0, 2.0, f'Time: {state.physics[0, -1]:.2f}s', fontsize=12)
 
         plt.xlim(-params.x_threshold, params.x_threshold)
         plt.ylim(-params.x_threshold, params.x_threshold)

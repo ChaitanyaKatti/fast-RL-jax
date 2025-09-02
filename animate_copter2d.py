@@ -5,18 +5,21 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from pynput import keyboard
 
-from zoo import CartPoleEnv
+from zoo import Copter2DEnv
 from rl import ActorCritic
 
 def on_press(key, injected):
     global action
     try:
+        if key == keyboard.Key.up:
+            action[0] = 1
+        elif key == keyboard.Key.down:
+            action[0] = -1
         if key == keyboard.Key.left:
-            action = -1  # Move left
+            action[1] = 1
         elif key == keyboard.Key.right:
-            action = 1   # Move right
-        else:
-            action = 0   # No action
+            action[1] = -1
+        print(f"Action set to: {action}")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -24,11 +27,11 @@ if __name__ == "__main__":
     jax.default_device(jax.devices('cpu')[0])
 
     listener = keyboard.Listener(on_press=on_press)
-    action = 0  # Default action
+    action = [0, 0]  # Default action
     listener.start()
 
-    env = CartPoleEnv()
-    env_params = env.make_params(num_agents=10)
+    env = Copter2DEnv()
+    env_params = env.make_params(num_agents=1)
     network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
     rng = jax.random.PRNGKey(0)
     init_x = jnp.zeros(env.observation_space(env_params)[0].shape[0])
@@ -44,7 +47,6 @@ if __name__ == "__main__":
         pi, _ = network.apply(network_params, obs)
         key, _key = random.split(key)
         actions = pi.sample(_key)
-        # actions = pi.sample_deterministic()  # Deterministic actions
         # actions = jnp.array([action] * env_params.num_agents)
 
         step_keys = random.split(key, env_params.num_agents)
@@ -54,7 +56,7 @@ if __name__ == "__main__":
         ax.clear()
         env.render(state, params=env_params)
 
-        if i % env_params.num_steps == 0:
+        if i % env_params.num_steps == 0 or terminated.any():
             key, sub_key = random.split(key, 2)
             obs, state = env.reset(sub_key, env_params)
             print(f"Step {i}, Reward: {total_reward.mean()}, Terminated: {terminated}")

@@ -4,10 +4,10 @@ import flax.linen as nn
 import optax
 from flax.struct import dataclass
 from flax.training.train_state import TrainState
-from env import Env, EnvParams
 from typing import Dict
 from colorama import Fore
 
+from .env import Env, EnvParams
 
 @dataclass
 class PPOParams:
@@ -91,7 +91,7 @@ def make_params(
     )
 
 
-def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOParams):
+def make_train(network_cls: type[nn.Module], env: Env, env_params: EnvParams, params: PPOParams):
 
     # Define a linear learning rate schedule
     def linear_schedule(count):
@@ -106,7 +106,8 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
     def train(rng):
         # NETWORK
         rng, _rng = jax.random.split(rng)
-        init_x = jnp.zeros(env.observation_space(env_params)[0].shape[0])
+        init_x = jnp.zeros(env.observation_space(env_params)[0].shape)
+        network = network_cls(action_dim=env.action_space(env_params)[0].shape[0])
         network_params = network.init(_rng, init_x)
 
         # OPTIMIZER
@@ -157,6 +158,7 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
             runner_state, traj_batch = jax.lax.scan(
                 _env_step, runner_state, step_rngs, length=params.NUM_STEPS
             )
+
 
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs = runner_state
@@ -280,23 +282,27 @@ def make_train(network: nn.Module, env: Env, env_params: EnvParams, params: PPOP
                     total_rewards = jnp.mean(jnp.sum(info['reward'] * done_until, axis=0))
                     avg_length = jnp.mean(jnp.sum(done_until, axis=0))
                     print(
-                        Fore.YELLOW
-                        + f"Iteration: {i:>6d}"
+                        Fore.BLUE
+                        + f"Completed: {i * 100 / params.NUM_UPDATES:>6.2f}%"
+                        + " | "
+                        + Fore.YELLOW
+                        + f"Iteration: {i:>4d} / {params.NUM_UPDATES}"
+                        + " | "
                         + Fore.GREEN
-                        + f"\tAverage episode length: {avg_length:.2f}"
-                        + "\t|\t"
+                        + f"Average episode length: {avg_length:.2f}"
+                        + " | "
                         + Fore.BLUE
                         + f"Total rewards: {total_rewards:.2f}"
-                        + "\t|\t",
+                        + " | ",
                         end="",
                     )
                     print(
                         Fore.CYAN
                         + f"Actor Loss: {jnp.mean(actor_loss_arr):e}"
-                        + "\t|\t"
+                        + " | "
                         + Fore.MAGENTA
                         + f"Value Loss: {jnp.mean(value_loss_arr):e}"
-                        + "\t|\t"
+                        + " | "
                         + Fore.YELLOW
                         + f"Entropy: {jnp.mean(entropy_arr):.4f}"
                     )
