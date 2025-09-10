@@ -4,9 +4,10 @@ from jax import random
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from pynput import keyboard
+import cv2
 
 from zoo import MazeEnv
-from rl import ActorCritic
+from rl import CNNActorCritic
 
 def on_press(key):
     global action
@@ -30,10 +31,10 @@ if __name__ == "__main__":
     listener.start()
 
     env = MazeEnv()
-    env_params = env.make_params(num_agents=5)
-    network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
+    env_params = env.make_params(num_agents=1, num_steps=200, dt=0.01)
+    network = CNNActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
     rng = jax.random.PRNGKey(0)
-    init_x = jnp.zeros(env.observation_space(env_params)[0].shape[0])
+    init_x = jnp.zeros(env.observation_space(env_params)[0].shape)
     network_params = network.init(rng, init_x)
 
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -42,7 +43,7 @@ if __name__ == "__main__":
     total_reward = jnp.zeros(env_params.num_agents)
     
     step_jit  = jax.jit(env.step, static_argnames=['params'])
-
+    
     def animate(i):
         global key, state, action, obs, network, network_params, total_reward
         # pi, _ = network.apply(network_params, obs)
@@ -55,14 +56,15 @@ if __name__ == "__main__":
         obs, state, reward, terminated, info = step_jit(step_keys, state, actions, env_params)
         total_reward += reward
 
-        ax.clear()
         env.render(state, params=env_params)
 
         if i % env_params.num_steps == 0:
             key, sub_key = random.split(key, 2)
             obs, state = env.reset(sub_key, env_params)
-            print(f"Step {i}, Reward: {total_reward.mean()}, Terminated: {terminated}")
+            print(f"Step {i}, Reward: {total_reward}, Terminated: {terminated}")
             total_reward = jnp.zeros(env_params.num_agents)
 
-    ani = FuncAnimation(fig, animate, frames=None, interval=1000*env_params.dt, cache_frame_data=False)
-    plt.show()
+    for i in range(1000):
+        animate(i)
+        if cv2.waitKey(0) & 0xFF == ord('q'):
+            break
