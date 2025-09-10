@@ -320,15 +320,15 @@ class CrazyflieEnv(Env):
         torque_coeff: float = 0.005964552,
         drag_coeff: jnp.ndarray = jnp.array([-9.1785e-7, -9.1785e-7, -10.311e-7]),
         motor_settling_time: float = 0.01,
-        phy_freq: int = 100,
-        ctrl_freq: int = 20,
+        phy_freq: float = 100.0,
+        ctrl_freq: float = 20.0,
         pos_threshold: jnp.ndarray = jnp.array([2.0, 2.0, 2.0]),
         num_steps: int = 100,
     ) -> CrazyflieParams:
-        assert phy_freq % ctrl_freq == 0, "phy_freq must be a multiple of ctrl_freq"
+        assert jnp.isclose(phy_freq % ctrl_freq, 0), "phy_freq must be a multiple of ctrl_freq"
         phy_time_step = 1.0 / phy_freq
         ctrl_time_step = 1.0 / ctrl_freq
-        phy_steps_per_ctrl_step = int(ctrl_time_step // phy_time_step)
+        phy_steps_per_ctrl_step = int(phy_freq // ctrl_freq)
         motor_alpha = 1.0 - jnp.exp(-4 * phy_time_step / motor_settling_time)
 
         # Inverse of inertia
