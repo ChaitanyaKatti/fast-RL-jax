@@ -227,8 +227,9 @@ def make_train(network_cls: type[nn.Module], env: Env, env_params: EnvParams, pa
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = (
-                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
-                        )
+                            0.5 * jnp.maximum(value_losses, value_losses_clipped)
+                        ).mean()
+                        entropy = pi.entropy().mean()
 
                         # CALCULATE ACTOR LOSS
                         ratio = jnp.exp(log_prob - traj_batch.log_prob)
@@ -240,13 +241,10 @@ def make_train(network_cls: type[nn.Module], env: Env, env_params: EnvParams, pa
                         # )
 
                         # Simple Policy Optimization, Type L2 Loss
-                        loss_actor = -(ratio * gae - jnp.abs(gae) * jnp.square(ratio - 1.0)/(2.0 * params.CLIP_EPS))
+                        loss_actor = -(ratio * gae - jnp.abs(gae) * jnp.square(ratio - 1.0)/(2.0 * params.CLIP_EPS)).mean()
 
                         # SPO, Type L1 Loss
                         # loss_actor = jnp.abs(gae*(ratio - 1) - jnp.abs(gae) * params.CLIP_EPS) # Type L1 loss
-
-                        loss_actor = loss_actor.mean()
-                        entropy = pi.entropy().mean()
 
                         total_loss = (
                             loss_actor
@@ -279,6 +277,8 @@ def make_train(network_cls: type[nn.Module], env: Env, env_params: EnvParams, pa
                     total_loss, (actor_loss_arr, value_loss_arr, entropy_arr) = loss_info
                     done_until = jnp.cumsum(info['done'], axis=0) # shape: (num_steps, num_agents)
                     done_until = jnp.where(done_until == 0, 1, 0)
+                    # print(info['reward'])
+                    # print(info['reward'].shape, done_until.shape, jnp.sum(info['reward'] * done_until, axis=0).shape)
                     total_rewards = jnp.mean(jnp.sum(info['reward'] * done_until, axis=0))
                     avg_length = jnp.mean(jnp.sum(done_until, axis=0))
                     print(

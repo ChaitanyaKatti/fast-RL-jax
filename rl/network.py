@@ -3,7 +3,14 @@ import flax.linen as nn
 from flax.linen.initializers import orthogonal
 from typing import Tuple
 
-from .distribution import Distribution, BetaDistribution, MultivariateNormalDiag, TanhMultivariateNormalDiag, TruncatedMultivariateNormalDiag, CategoricalDistribution
+from .distribution import (
+    Distribution,
+    BetaDistribution,
+    MultivariateNormalDiag,
+    TanhMultivariateNormalDiag,
+    TruncatedMultivariateNormalDiag,
+    CategoricalDistribution,
+)
 
 class ActorCritic(nn.Module):
     action_dim: int
@@ -58,8 +65,8 @@ class CNNActorCritic(nn.Module):
     @nn.compact
     def __call__(self, x):
         # Shared Convolutional Network
-        base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(2, 2), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(x))     # (B, 32, 32,  1) -> (B, 16, 16, 32)
-        base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(2, 2), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(base))  # (B, 16, 16, 32) -> (B,  8,  8, 32)
+        # base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(2, 2), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(x))     # (B, 32, 32,  1) -> (B, 16, 16, 32)
+        base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(2, 2), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(x))  # (B, 16, 16, 32) -> (B,  8,  8, 32)
         base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(2, 2), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(base))  # (B,  8,  8, 32) -> (B,  4,  4, 32)
         base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(1, 1), padding=0, kernel_init=orthogonal(jnp.sqrt(2)))(base))  # (B,  4,  4, 32) -> (B,  1,  1, 32)
         base = base.reshape((base.shape[0], -1))  # Flatten, (B, 1*1*32) = (B, 32)
