@@ -34,25 +34,25 @@ if __name__ == "__main__":
     init_x = jnp.zeros(env.observation_space(env_params)[0].shape[0])
     network_params = network.init(rng, init_x)
 
-    fig, ax = plt.subplots(figsize=(16, 6))
     key = random.PRNGKey(0)
     obs, state = env.reset(key, env_params)
     total_reward = jnp.zeros(env_params.num_agents)
 
-    def animate(i):
-        global key, state, action, obs, network, network_params, total_reward
-        pi, _ = network.apply(network_params, obs)
-        key, _key = random.split(key)
-        actions = pi.sample(_key)
+    renderer = env.make_renderer()
+
+    i = 1
+    while True:
+        # pi, _ = network.apply(network_params, obs)
+        # key, _key = random.split(key)
+        # actions = pi.sample(_key)
         # actions = pi.sample_deterministic()  # Deterministic actions
-        # actions = jnp.array([action] * env_params.num_agents)
+        actions = jnp.array([action] * env_params.num_agents)
 
         step_keys = random.split(key, env_params.num_agents)
         obs, state, reward, terminated, info = env.step(step_keys, state, actions, env_params)
         total_reward += reward
 
-        ax.clear()
-        env.render(state, params=env_params)
+        renderer(state, params=env_params)
 
         if i % env_params.num_steps == 0:
             key, sub_key = random.split(key, 2)
@@ -60,5 +60,5 @@ if __name__ == "__main__":
             print(f"Step {i}, Reward: {total_reward.mean()}, Terminated: {terminated}")
             total_reward = jnp.zeros(env_params.num_agents)
 
-    ani = FuncAnimation(fig, animate, frames=None, interval=1000*env_params.dt, cache_frame_data=False)
-    plt.show()
+        i += 1
+

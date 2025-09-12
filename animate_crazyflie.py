@@ -60,6 +60,8 @@ if __name__ == "__main__":
     obs, state = env.reset(key, env_params)
     total_reward = jnp.zeros(env_params.num_agents)
 
+    renderer = env.make_renderer()
+
     for i in range(10000):
         # pi, _ = network.apply(network_params, obs)
         # key, _key = random.split(key)
@@ -68,7 +70,7 @@ if __name__ == "__main__":
 
         key, sub_key = random.split(key, 2)
         obs, state, reward, terminated, info = env.step(sub_key, state, actions, env_params)
-        env.render(state, env_params)
+        renderer(state, env_params)
         total_reward += reward
 
         if terminated.any():

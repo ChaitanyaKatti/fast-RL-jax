@@ -41,8 +41,10 @@ if __name__ == "__main__":
     
     step_jit  = jax.jit(env.step, static_argnames=['params'])
     
-    def animate(i):
-        global key, state, action, obs, network, network_params, total_reward
+    renderer = env.make_renderer()
+
+    i = 1
+    while True:
         # pi, _ = network.apply(network_params, obs)
         # key, _key = random.split(key)
         # actions = pi.sample(_key)
@@ -53,7 +55,7 @@ if __name__ == "__main__":
         obs, state, reward, terminated, info = step_jit(step_keys, state, actions, env_params)
         total_reward += reward
 
-        env.render(state, params=env_params)
+        renderer(state, params=env_params)
 
         if i % env_params.num_steps == 0:
             key, sub_key = random.split(key, 2)
@@ -61,9 +63,6 @@ if __name__ == "__main__":
             print(f"Step {i}, Reward: {total_reward}, Terminated: {terminated}")
             total_reward = jnp.zeros(env_params.num_agents)
 
-    i = 1
-    while True:
-        animate(i)
         i += 1
         if cv2.waitKey(0) & 0xFF == ord('q'):
             break
