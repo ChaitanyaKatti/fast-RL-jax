@@ -1,8 +1,11 @@
 from flax import struct
+import jax
 import jax.numpy as jnp
 from jax import random, vmap
 import matplotlib.pyplot as plt
 import os
+import cv2
+import numpy as np
 
 from rl import Env, EnvParams, EnvState
 
@@ -10,13 +13,15 @@ from rl import Env, EnvParams, EnvState
 class MazeParams(EnvParams):
     num_agents: int         # Number of agents in the environment
     num_particles: int      # Number of particles that each agent controls
-    grid: jnp.ndarray       # The binary occupancy map of the env (0 means obstacle, 1 is empty cell)
+    grid: jnp.ndarray       # The binary occupancy map of the env (0 means obstacle, 1 is empty cell), Shape (*grid_shape), dtype=bool
     grid_shape: jnp.ndarray # The shape of the 2D occupancy grid, Shape (2), dtype=int
     goal_point: jnp.ndarray # The index of goal grid cell, Shape (2,), dtype=int
     num_steps: int          # Time limit for the episode in steps
     available_positions: jnp.ndarray # (Required to make JIT possible) Precomputed list of available positions in the grid
     dt: float               # Used for rendering only
-    
+    max_dist: float         # Maximum possible distance in the grid, used for normalizing the reward
+    dist_grid: jnp.ndarray  # Precomputed distance grid from each cell to the goal, used for reward calculation
+
     def __hash__(self):
         return hash((
             self.num_agents,
@@ -28,7 +33,7 @@ class MazeParams(EnvParams):
             # self.available_positions.tobytes(), # Don't include arrays in the hash
             self.dt,
         ))
-    
+
     def __eq__(self, other):
         return (
             self.num_agents == other.num_agents and
@@ -41,20 +46,26 @@ class MazeParams(EnvParams):
 @struct.dataclass
 class MazeState(EnvState):
     timestep: jnp.ndarray   # Current timestep, Shape: (num_agents,), dtype=int
-    positions: jnp.ndarray  # (row, col) indices within the grid, Shape: (num_agents, num_particles, 2), dtype=int
+    occupancy: jnp.ndarray  # Occupancy Map of particles, Shape: (num_agents, *grid_shape), dtype=bool
 
 class MazeEnv(Env):
     @classmethod
     def reset(cls, key: jnp.ndarray, params: MazeParams):
         # Randomly sample positions for each agent's particles
         keys = random.split(key, params.num_agents)
-        positions = vmap(
-            lambda k: random.choice(
+        occupancy = jnp.full((params.grid_shape), False)
+
+        def random_occupancy(k):
+            indices = random.choice(
                 k, params.available_positions, shape=(params.num_particles,), replace=False
             )
-        )(keys)
+            return occupancy.at[indices[:, 0], indices[:, 1]].set(True)
 
-        state = MazeState(positions=positions, timestep=jnp.zeros(shape=params.num_agents, dtype=jnp.int32))
+        occupancy = vmap(random_occupancy)(keys)
+        state = MazeState(
+            occupancy=occupancy,
+            timestep=jnp.zeros(shape=params.num_agents, dtype=jnp.int32),
+        )
         obs = cls.observation(state, params)
 
         return obs, state
@@ -73,79 +84,145 @@ class MazeEnv(Env):
 
     @staticmethod
     def observation_space(params: MazeParams):
-        low =  jnp.zeros(shape=params.grid_shape + (1,), dtype=jnp.float32) # Single channel grid
-        high = jnp.ones(shape=params.grid_shape + (1,), dtype=jnp.float32) # Single channel grid
+        low =  jnp.zeros(shape=params.grid_shape + (2,), dtype=jnp.float32) # 1st channel grid, 2nd channel occupancy
+        high = jnp.ones(shape=params.grid_shape + (2,), dtype=jnp.float32) # 1st channel grid, 2nd channel occupancy
         return low, high
 
     @staticmethod
     def maze_step(state: MazeState, action: jnp.ndarray, params: MazeParams):
-        # Actions: 0=left, 1=right, 2=up, 3=down in (row, col)
-        deltas = jnp.array([[0, -1], [0, 1], [-1, 0], [1, 0]])
-        move = deltas[action]  # Shape: (num_agents, 2)
-        candidate = state.positions + move[:, None, :]        # broadcast to all particles
-        candidate = jnp.clip(candidate, 0, jnp.array(params.grid_shape) - 1)
+        H, W = params.grid_shape
 
-        # Check target cell is free (grid==1)
-        free = params.grid[candidate[..., 0], candidate[..., 1]] == 1  # (num_agents, num_particles)
+        def step_dir(i, occ_grid):
+            occ, grid = occ_grid
+            free = (~occ[i - 1]) & grid[i - 1]
+            occ = occ.at[i - 1].set((occ[i] & free) | occ[i - 1])
+            occ = occ.at[i].set(occ[i] & ~free)
+            return (occ, grid)
 
-        new_positions = jnp.where(free[..., None], candidate, state.positions)
+        def move_with_scan(occ, grid, size, flip_axis=None, transpose=False):
+            if transpose:
+                occ, grid = occ.T, grid.T
+            if flip_axis is not None:
+                occ, grid = jnp.flip(occ, axis=flip_axis), jnp.flip(grid, axis=flip_axis)
 
-        return MazeState(positions=new_positions, timestep=state.timestep + 1)
+            occ, _ = jax.lax.fori_loop(1, size, step_dir, (occ, grid))
+
+            if flip_axis is not None:
+                occ = jnp.flip(occ, axis=flip_axis)
+            if transpose:
+                occ = occ.T
+            return occ
+
+        def move_particles(occ, act):
+            return jax.lax.switch(
+                act,
+                [
+                    lambda occ: move_with_scan(occ, params.grid, W, transpose=True),          # left
+                    lambda occ: move_with_scan(occ, params.grid, W, flip_axis=0, transpose=True),  # right
+                    lambda occ: move_with_scan(occ, params.grid, H),                          # up
+                    lambda occ: move_with_scan(occ, params.grid, H, flip_axis=0),             # down
+                ],
+                occ,
+            )
+
+        occupancy = vmap(move_particles)(state.occupancy, action)
+        return MazeState(occupancy=occupancy, timestep=state.timestep + 1)
 
     @staticmethod
     def reward(state: MazeState, params: MazeParams) -> jnp.ndarray:
-        diagonal = jnp.linalg.norm(jnp.array(params.grid_shape)) # Max possible distance in the grid
-        return (
-            0.5 - jnp.linalg.norm(state.positions - params.goal_point, axis=-1).mean(axis=-1) / diagonal
-        )
+        return 0.5 - jnp.max(state.occupancy * params.dist_grid, axis=(-1,-2)) / (params.max_dist)
 
     @staticmethod
     def terminated(state: MazeState, params: MazeParams) -> jnp.ndarray:
-        return jnp.full((state.positions.shape[0],), False)
+        return jnp.full(params.num_agents, False) # No terminal state, episodes end after fixed number of steps
 
     @staticmethod
     def observation(state: MazeState, params: MazeParams) -> jnp.ndarray:
-        def mark_positions(positions):
-            return jnp.zeros(params.grid_shape).reshape(*params.grid_shape, 1).at[positions[:, 0], positions[:, 1], 0].set(1.0)
-        obs = vmap(mark_positions)(state.positions)
-        return obs
+        # Duplicate params.grid for each agent and stack with occupancy
+        grid = jnp.broadcast_to(params.grid, (params.num_agents,) + params.grid.shape) # Duplicate grid for each agent, Shape: (num_agents, H, W)
+        grid = grid[..., jnp.newaxis].astype(jnp.float32) # Add channel dim, Shape: (num_agents, H, W, 1)
+        occupancy = state.occupancy[..., jnp.newaxis].astype(jnp.float32) # Add channel dim, Shape: (num_agents, H, W, 1)
+        return jnp.concatenate([grid, occupancy], axis=-1)  # Shape: (num_agents, H, W, 2)
 
     @staticmethod
-    def render(state: MazeState, params: MazeParams):
-        # Convert grid to RGB: black for obstacles, white for background
-        base = params.grid.astype(jnp.float32)
-        img = jnp.stack([base, base, base], axis=-1)  # (H, W, 3)
+    def make_renderer():
+        window_name = "MazeEnv"
+        closed = {"flag": False}
 
-        # Add green particles for each agent
-        for i, agent_positions in enumerate(state.positions):
-            cmap = plt.cm.get_cmap('hsv', len(state.positions) + 1)  # Get a colormap
-            color = cmap(i)[:3]  # Extract RGB values for the agent
-            img = img.at[agent_positions[:, 0], agent_positions[:, 1]].set(color)  # Set to agent-specific color
+        def renderer(state: MazeState, params: MazeParams) -> bool:
+            if closed["flag"]:
+                return False
 
-        # Add red goal point
-        img = img.at[params.goal_point[0], params.goal_point[1], 0].set(1.0)  # Red channel
-        
-        # Add text info
-        plt.text(0, -2, f"Timestep: {state.timestep[0]}", color='black', fontsize=12)
-        
-        plt.imshow(img)
-        plt.gca().set_aspect('equal')
-        plt.axis('off')
-        plt.title('Maze')
+            base = params.grid.astype(jnp.float32)
+
+            @jax.jit
+            def render_single(occ):
+                img = jnp.stack([base, base, base], axis=-1)  # RGB background
+                occ = occ.astype(jnp.float32).reshape(params.grid_shape + (1,))
+                img = img * (1 - occ) + occ * jnp.array([0.0, 1.0, 0.0])  # mark agent green
+                img = img.at[params.goal_point[0], params.goal_point[1]].set(jnp.array([1.0, 0.0, 0.0]))  # goal red
+                return img
+
+            plot_grid_size = int(jnp.sqrt(params.num_agents))
+            images = vmap(render_single)(state.occupancy[:plot_grid_size**2])
+            images = jnp.clip(images, 0.0, 1.0)
+
+            img_size = params.grid_shape[0] * plot_grid_size
+            final = jnp.ones((img_size, img_size, 3), dtype=jnp.float32)
+
+            for i, img in enumerate(images):
+                row = i // plot_grid_size
+                col = i % plot_grid_size
+                final = final.at[
+                    row * params.grid_shape[0]:(row + 1) * params.grid_shape[0],
+                    col * params.grid_shape[1]:(col + 1) * params.grid_shape[1],
+                    :
+                ].set(img)
+
+            final = np.array((final * 255).astype(jnp.uint8))
+            final = cv2.cvtColor(final, cv2.COLOR_RGB2BGR)
+            final = cv2.resize(final, (720, 720), interpolation=cv2.INTER_NEAREST)
+            cv2.putText(final, f"Step: {int(state.timestep[0])}", (20, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 2)
+
+            cv2.imshow(window_name, final)
+
+            # check if user closed the window
+            if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+                closed["flag"] = True
+                return False
+
+            # keep UI responsive
+            if cv2.waitKey(int(1000 * params.dt)) & 0xFF == 27:  # ESC closes
+                closed["flag"] = True
+                return False
+
+            return True
+
+        return renderer
+
 
     @staticmethod
     def make_params(
+        maze_path: str,
         num_agents: int = 1,
         num_particles: int = 16,
-        maze_path: str = os.path.join(os.path.dirname(__file__), 'assets/maze32.png'),
-        goal_point = jnp.array([0,0]),
+        goal_point: tuple = (0,0),
         num_steps: int = 200,
+        dt=0.001
     ) -> MazeParams:
         image = plt.imread(maze_path)
         grayscale = jnp.mean(image, axis=-1)
-        grid = (grayscale > 0.5).astype(jnp.int32)  # Threshold at 0.5
+        grid = (grayscale > 0.5) # Threshold at 0.5
         grid_shape = grid.shape
-        available_positions = jnp.argwhere(grid == 1)
+        goal_point = jnp.array(goal_point, dtype=jnp.int32)
+        available_positions = jnp.argwhere(grid)
+
+        H, W = grid.shape
+        rows = jnp.arange(H)[:, None] # Shape (H, 1)
+        cols = jnp.arange(W)[None, :] # Shape (1, W)
+        dist_grid = jnp.sqrt((rows - goal_point[0])**2 + (cols - goal_point[1])**2) # Shape (H, W)
+        max_dist = jnp.linalg.norm(jnp.array(grid.shape))
 
         return MazeParams(
             num_agents=num_agents,
@@ -155,5 +232,7 @@ class MazeEnv(Env):
             goal_point=goal_point,
             num_steps=num_steps,
             available_positions=available_positions,
-            dt=0.001,
+            dist_grid=dist_grid,
+            max_dist=max_dist,
+            dt=dt,
         )

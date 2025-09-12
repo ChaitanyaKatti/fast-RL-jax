@@ -118,33 +118,61 @@ class Copter2DEnv(Env):
         return state.physics[:, :-1]  # Exclude the time step from the observation
 
     @staticmethod
-    def render(state: Copter2DState, params: Copter2DParams):
-        xs, ys, thetas = state.physics[:, 0], state.physics[:, 1], state.physics[:, 4]
+    def make_renderer():
+        fig, ax = plt.subplots(figsize=(8, 8))
+        plt.ion()
 
-        # Plot the drone position
-        for x, y, theta in zip(xs, ys, thetas):
-            cosl = params.arm_length* jnp.cos(theta)
-            sinl = params.arm_length* jnp.sin(theta)
-            # Drone body
-            plt.plot(x, y, 'ro', markersize=15, alpha=0.6)
-            # Arms
-            plt.plot([x - cosl, x + cosl], [y - sinl, y + sinl], 'b-', linewidth=2, alpha=0.6)
-            # Motors
-            plt.plot(x - cosl, y - sinl, "bo", markersize=5, alpha=0.6)
-            plt.plot(x + cosl, y + sinl, "bo", markersize=5, alpha=0.6)
-            # Vertial
-            plt.plot([x, x - sinl], [y, y + cosl], 'g-', linewidth=2, alpha=0.6)
+        closed = {"flag": False}
 
-        # Add text
-        plt.text(-2.0, 2.0, f'Time: {state.physics[0, -1]:.2f}s', fontsize=12)
+        def on_close(event):
+            closed["flag"] = True
+            print("Render window closed by user.")
 
-        plt.xlim(-params.x_threshold, params.x_threshold)
-        plt.ylim(-params.x_threshold, params.x_threshold)
-        plt.gca().set_aspect('equal')
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.title('Copter2D')
-        plt.grid(alpha=0.3)
+        fig.canvas.mpl_connect("close_event", on_close)
+
+        def renderer(state: Copter2DState, params: Copter2DParams) -> bool:
+            """Render a Copter2D frame. Returns False if window was closed, True otherwise."""
+            if closed["flag"]:
+                return False
+
+            ax.clear()
+            xs, ys, thetas = state.physics[:, 0], state.physics[:, 1], state.physics[:, 4]
+
+            for x, y, theta in zip(xs, ys, thetas):
+                cosl = params.arm_length * jnp.cos(theta)
+                sinl = params.arm_length * jnp.sin(theta)
+
+                # Drone body
+                ax.plot(x, y, 'ro', markersize=15, alpha=0.6)
+
+                # Arms
+                ax.plot([x - cosl, x + cosl], [y - sinl, y + sinl],
+                        'b-', linewidth=2, alpha=0.6)
+
+                # Motors
+                ax.plot(x - cosl, y - sinl, "bo", markersize=5, alpha=0.6)
+                ax.plot(x + cosl, y + sinl, "bo", markersize=5, alpha=0.6)
+
+                # Vertical axis
+                ax.plot([x, x - sinl], [y, y + cosl],
+                        'g-', linewidth=2, alpha=0.6)
+
+            # Add text
+            ax.text(-2.0, 2.0, f'Time: {state.physics[0, -1]:.2f}s', fontsize=12)
+
+            # Axes settings
+            ax.set_xlim(-params.x_threshold, params.x_threshold)
+            ax.set_ylim(-params.x_threshold, params.x_threshold)
+            ax.set_aspect('equal')
+            ax.set_xlabel('x')
+            ax.set_ylabel('y')
+            ax.set_title('Copter2D')
+            ax.grid(alpha=0.3)
+
+            plt.pause(params.dt)
+            return True
+
+        return renderer
 
     @staticmethod
     def make_params(

@@ -110,51 +110,57 @@ class CartPoleEnv(Env):
         return state.physics[:, :-1]  # Exclude the time step from the observation
 
     @staticmethod
-    def render(state: CartPoleState, params: CartPoleParams) -> None:
-        # Draw the cart
-        xs, thetas = state.physics[:, 0], state.physics[:, 2]
-        cart_width = 0.4
-        cart_height = 0.2
+    def make_renderer() -> callable:
+        fig, ax = plt.subplots(figsize=(16, 6))
+        plt.ion()
 
-        for i in range(params.num_agents):
-            cart_x = xs[i]
-            cart_y = 0.0  # y position of the cart
-            # Draw cart as a box centered at (x, 0)
-            plt.gca().add_patch(
-                plt.Rectangle(
-                    (cart_x - cart_width / 2, cart_y - cart_height / 2),
-                    cart_width,
-                    cart_height,
-                    color="blue",
-                    alpha=0.6,
+        closed = {"flag": False}  # mutable state to capture closure event
+
+        def on_close(event):
+            closed["flag"] = True
+            print("Render window closed by user.")
+
+        fig.canvas.mpl_connect("close_event", on_close)
+
+        def renderer(state: CartPoleState, params: CartPoleParams) -> bool:
+            """Render a frame. Returns False if window closed, True otherwise."""
+            if closed["flag"]:
+                return False
+
+            ax.clear()
+            xs, thetas = state.physics[:, 0], state.physics[:, 2]
+            cart_width, cart_height = 0.4, 0.2
+
+            for i in range(params.num_agents):
+                cart_x = xs[i]
+                cart_y = 0.0
+                ax.add_patch(
+                    plt.Rectangle(
+                        (cart_x - cart_width / 2, cart_y - cart_height / 2),
+                        cart_width,
+                        cart_height,
+                        color="blue",
+                        alpha=0.6,
+                    )
                 )
-            )
+                pole_length = params.half_length * 2
+                pole_x_end = cart_x + pole_length * jnp.sin(thetas[i])
+                pole_y_end = cart_y + pole_length * jnp.cos(thetas[i])
+                ax.plot([cart_x, pole_x_end], [cart_y, pole_y_end], "r-", lw=3, alpha=0.6)
+                ax.plot(cart_x, cart_y, "ko", ms=6, alpha=0.6)
 
-            # Draw pole as a line from cart center at (x, 0) at angle theta
-            pole_length = params.half_length * 2
-            pole_x_end = cart_x + pole_length * jnp.sin(thetas[i])
-            pole_y_end = cart_y + pole_length * jnp.cos(thetas[i])
-            plt.plot(
-                [cart_x, pole_x_end],
-                [cart_y, pole_y_end],
-                color="red",
-                linewidth=3,
-                alpha=0.6,
-            )
+            ax.text(-3.5, 1.0, f"Time: {state.physics[0, -1]:.2f}s", fontsize=12)
+            ax.set_xlim(-4, 4)
+            ax.set_ylim(-1.5, 1.5)
+            ax.set_aspect("equal")
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+            ax.set_title("CartPole")
+            ax.grid(alpha=0.3)
+            plt.pause(params.dt)
+            return True
 
-            # Draw axle
-            plt.plot(cart_x, cart_y, 'ko', markersize=6, alpha=0.6)
-
-        # Add text
-        plt.text(-3.5, 1.0, f'Time: {state.physics[0, -1]:.2f}s', fontsize=12)
-        
-        plt.xlim(-4, 4)
-        plt.ylim(-1.5, 1.5)
-        plt.gca().set_aspect('equal')
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.title('CartPole')
-        plt.grid(alpha=0.3)
+        return renderer
 
     @staticmethod
     def make_params(
