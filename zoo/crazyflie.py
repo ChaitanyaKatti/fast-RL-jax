@@ -69,8 +69,6 @@ class CrazyflieState(EnvState):
 
 
 class CrazyflieEnv(Env):
-    renderer: DroneRenderer = None
-
     @classmethod
     def reset(cls, key: jnp.ndarray, params: CrazyflieParams):
         pos_rand_mag = 0.8*params.pos_threshold             # Random position magnitude for initial state
@@ -267,30 +265,29 @@ class CrazyflieEnv(Env):
             state.last_action,
         ], axis=-1)
 
-    # @staticmethod
-    def render(self, state: CrazyflieState, params: CrazyflieParams):
-        if self.renderer is None:
-            print("Initializing renderer...")
-            self.renderer = DroneRenderer()
+    @staticmethod
+    def make_renderer() -> callable:
+        renderer = DroneRenderer()
+        def render(state: CrazyflieState, params: CrazyflieParams):
+            if renderer.should_close():
+                print("Closing renderer...")
+                renderer.cleanup()
 
-        if self.renderer.should_close():
-            print("Closing renderer...")
-            self.renderer.cleanup()
-        
-        else:
-            position = np.array(state.pos[0])
-            rotation = np.array(state.rot_mat[0])
-            debug_info = {
-                'Pos': np.round(state.pos[0], 2),
-                'Vel': np.round(state.vel[0], 2),
-                'Quat': np.round(state.quat[0], 2),
-                'Ang Vel': np.round(state.ang_vel[0], 2),
-                'PWM': np.round(state.pwm[0], 1),
-                'Error Sum': np.round(state.rate_error_sum[0], 2),
-                'Action': np.round(state.current_action[0], 2),
-                'Time': np.round(state.t[0], 2),
-            }
-            self.renderer.render(position, rotation, state.t[0], debug_info=None)
+            else:
+                position = np.array(state.pos[0])
+                rotation = np.array(state.rot_mat[0])
+                debug_info = {
+                    'Pos': np.round(state.pos[0], 2),
+                    'Vel': np.round(state.vel[0], 2),
+                    'Quat': np.round(state.quat[0], 2),
+                    'Ang Vel': np.round(state.ang_vel[0], 2),
+                    'PWM': np.round(state.pwm[0], 1),
+                    'Error Sum': np.round(state.rate_error_sum[0], 2),
+                    'Action': np.round(state.current_action[0], 2),
+                    'Time': np.round(state.t[0], 2),
+                }
+                renderer.render(position, rotation, state.t[0], debug_info)
+        return render
 
     @staticmethod
     def make_params(
