@@ -1,8 +1,6 @@
 import jax
 import jax.numpy as jnp
 from jax import random
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 from pynput import keyboard
 import cv2
 
@@ -31,13 +29,12 @@ if __name__ == "__main__":
     listener.start()
 
     env = MazeEnv()
-    env_params = env.make_params(num_agents=1, num_steps=200, dt=0.01)
+    env_params = env.make_params(num_agents=1, num_steps=200, num_particles=8, dt=0.01, maze_path="./zoo/assets/maze16.png")
     network = CNNActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
     rng = jax.random.PRNGKey(0)
     init_x = jnp.zeros(env.observation_space(env_params)[0].shape)
     network_params = network.init(rng, init_x)
 
-    fig, ax = plt.subplots(figsize=(6, 6))
     key = random.PRNGKey(0)
     obs, state = env.reset(key, env_params)
     total_reward = jnp.zeros(env_params.num_agents)
@@ -64,7 +61,9 @@ if __name__ == "__main__":
             print(f"Step {i}, Reward: {total_reward}, Terminated: {terminated}")
             total_reward = jnp.zeros(env_params.num_agents)
 
-    for i in range(1000):
+    i = 1
+    while True:
         animate(i)
+        i += 1
         if cv2.waitKey(0) & 0xFF == ord('q'):
             break
