@@ -17,7 +17,7 @@ class OrbitCamera:
 
     def get_view_matrix(self):
         up = np.array([0.0, 0.0, 1.0])
-        
+
         # Compute view matrix
         forward = self.target - self.position
         forward = forward / np.linalg.norm(forward)
@@ -53,14 +53,14 @@ class OrbitCamera:
         # Constrain theta between epsilon and pi-epsilon to avoid gimbal lock
         self.theta = np.clip(self.theta, 0.1, math.pi - 0.1)
         self.update_position()
-    
-    def update_position(self):    
+
+    def update_position(self):
         # Convert spherical coordinates to Cartesian
         x = self.radius * math.sin(self.theta) * math.cos(self.phi)
         y = self.radius * math.sin(self.theta) * math.sin(self.phi)
         z = self.radius * math.cos(self.theta)
         self.position = np.array([x, y, z]) + self.target
-    
+
     def get_perspective_matrix(self, fov, aspect, near, far):
         f = 1.0 / math.tan(math.radians(fov) / 2.0)
         projection = np.zeros((4, 4), dtype=np.float32)
@@ -70,4 +70,3 @@ class OrbitCamera:
         projection[2, 3] = 2.0 * far * near / (near - far)
         projection[3, 2] = -1.0
         return projection
-    

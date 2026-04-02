@@ -17,7 +17,7 @@ cartpole = {
         "VF_COEF": 0.5,
         "MAX_GRAD_NORM": 1.0,
         "ANNEAL_LR": False,
-        "DEBUG": True,
+        "DEBUG": False,
     },
     "env_params": {
         "num_agents": 1024,
@@ -67,11 +67,11 @@ copter2d = {
 crazyflie = {
     "ppo_params": {
         "LR": 3e-4,
-        "NUM_AGENTS": 1,
-        "NUM_STEPS": 100,
-        "TOTAL_TIMESTEPS": 100_000_000,
-        "EPOCHS": 4,
-        "NUM_MINIBATCHES": 10,
+        "NUM_AGENTS": 128,
+        "NUM_STEPS": 300,
+        "TOTAL_TIMESTEPS": 20_000_000,
+        "EPOCHS": 16,
+        "NUM_MINIBATCHES": 8,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "CLIP_EPS": 0.2,
@@ -83,21 +83,21 @@ crazyflie = {
         "DEBUG": True,
     },
     "env_params": {
-        "num_agents": 1,
-        "num_steps": 200,
-        "phy_freq": 100,
-        "ctrl_freq": 10,
+        "num_agents": 128,
+        "num_steps": 300,
+        "phy_freq": 200,
+        "ctrl_freq": 100,
     },
 }
 
 maze = {
     "ppo_params": {
         "LR": 3e-4,
-        "NUM_AGENTS": 1,
-        "NUM_STEPS": 100,
-        "TOTAL_TIMESTEPS": 10_000,
-        "EPOCHS": 4,
-        "NUM_MINIBATCHES": 10,
+        "NUM_AGENTS": 256,
+        "NUM_STEPS": 50,
+        "TOTAL_TIMESTEPS": 1_000_000,
+        "EPOCHS": 8,
+        "NUM_MINIBATCHES": 8,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "CLIP_EPS": 0.2,
@@ -109,11 +109,11 @@ maze = {
         "DEBUG": True,
     },
     "env_params": {
-        "num_agents": 1,
+        "num_agents": 256,
         "num_particles": 8,
         "maze_path": os.path.join(os.path.dirname(__file__), './zoo/assets/maze16.png'),
         "goal_point": (0, 0),
-        "num_steps": 200,
+        "num_steps": 50,
         "dt": 0.001,
     },
 }

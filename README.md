@@ -14,10 +14,10 @@ This project implements PPO from scratch using JAX for high-performance vectoriz
 
 ## Examples (Trained in 15sec 50M timesteps, Nvidia 3060 laptop GPU)
 ### CartPole Environment Animation
-![CartPole Animation](./assets/cartpole_animation.gif)
+![CartPole Animation](./misc/cartpole_animation.gif)
 
 ### Copter2D Environment Animation
-![CartPole Animation](./assets/copter2d_animation.gif)
+![CartPole Animation](./misc/copter2d_animation.gif)
 
 
 ## Mathematical Foundation

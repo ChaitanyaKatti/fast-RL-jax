@@ -65,21 +65,24 @@ class CNNActorCritic(nn.Module):
     @nn.compact
     def __call__(self, x):
         # Shared Convolutional Network
-        # base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(2, 2), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(x))     # (B, 32, 32,  1) -> (B, 16, 16, 32)
-        base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(2, 2), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(x))  # (B, 16, 16, 32) -> (B,  8,  8, 32)
-        base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(2, 2), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(base))  # (B,  8,  8, 32) -> (B,  4,  4, 32)
-        base = nn.relu(nn.Conv(features=32, kernel_size=(4, 4), strides=(1, 1), padding=0, kernel_init=orthogonal(jnp.sqrt(2)))(base))  # (B,  4,  4, 32) -> (B,  1,  1, 32)
-        base = base.reshape((base.shape[0], -1))  # Flatten, (B, 1*1*32) = (B, 32)
+        base = nn.relu(nn.Conv(features=32, kernel_size=(3, 3), strides=(1, 1), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(x))     # (B, 16, 16,  1) -> (B, 16, 16, 32)
+        base = nn.relu(nn.Conv(features=32, kernel_size=(3, 3), strides=(1, 1), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(base))  # (B, 16, 16, 32) -> (B, 16, 16, 32)
+        base = nn.relu(nn.max_pool(base, window_shape=(2, 2), strides=(2, 2), padding='VALID'))                                         # (B, 16, 16, 32) -> (B,  8,  8, 32)
+        
+        base = nn.relu(nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(base))  # (B,  8,  8, 32) -> (B,  8,  8, 64)
+        base = nn.relu(nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1), padding=1, kernel_init=orthogonal(jnp.sqrt(2)))(base))  # (B,  8,  8, 64) -> (B,  8,  8, 64)
+        base = nn.relu(nn.max_pool(base, window_shape=(2, 2), strides=(2, 2), padding='VALID'))                                         # (B,  8,  8, 64) -> (B,  4,  4, 64)
+
+        base = nn.relu(nn.Conv(features=128, kernel_size=(4, 4), strides=(1, 1), padding=0, kernel_init=orthogonal(jnp.sqrt(2)))(base)) # (B,  4,  4, 64) -> (B, 1,  1, 128)
+        base = base.reshape((base.shape[0], -1))  # Flatten, (B, 1*1*128) = (B, 128)
 
         # Actor Network
-        actor = nn.relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(base))
-        actor = nn.relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(actor))
-        logits = nn.Dense(self.action_dim, kernel_init=orthogonal(0.00001))(actor)
+        actor = nn.relu(nn.Dense(128, kernel_init=orthogonal(jnp.sqrt(2)))(base))
+        logits = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01))(actor)
         pi = CategoricalDistribution(logits)
 
         # Critic Network
-        critic = nn.relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(base))
-        critic = nn.relu(nn.Dense(32, kernel_init=orthogonal(jnp.sqrt(2)))(critic))
+        critic = nn.relu(nn.Dense(128, kernel_init=orthogonal(jnp.sqrt(2)))(base))
         critic = nn.Dense(1, kernel_init=orthogonal(1))(critic)
         critic = jnp.squeeze(critic, axis=-1)
 

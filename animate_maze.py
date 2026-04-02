@@ -29,7 +29,7 @@ if __name__ == "__main__":
     listener.start()
 
     env = MazeEnv()
-    env_params = env.make_params(num_agents=1, num_steps=200, num_particles=8, dt=0.01, maze_path="./zoo/assets/maze16.png")
+    env_params = env.make_params(num_agents=1, num_steps=100, num_particles=8, dt=0.001, maze_path="./zoo/assets/maze16.png")
     network = CNNActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
     rng = jax.random.PRNGKey(0)
     init_x = jnp.zeros(env.observation_space(env_params)[0].shape)
@@ -45,11 +45,11 @@ if __name__ == "__main__":
 
     i = 1
     while True:
-        # pi, _ = network.apply(network_params, obs)
-        # key, _key = random.split(key)
-        # actions = pi.sample(_key)
+        pi, _ = network.apply(network_params, obs)
+        key, _key = random.split(key)
+        actions = pi.sample(_key)
         # actions = pi.sample_deterministic()  # Deterministic actions
-        actions = jnp.array([action] * env_params.num_agents)
+        # actions = jnp.array([action] * env_params.num_agents)
 
         step_keys = random.split(key, env_params.num_agents)
         obs, state, reward, terminated, info = step_jit(step_keys, state, actions, env_params)
@@ -64,5 +64,5 @@ if __name__ == "__main__":
             total_reward = jnp.zeros(env_params.num_agents)
 
         i += 1
-        if cv2.waitKey(0) & 0xFF == ord('q'):
-            break
+        # if cv2.waitKey(0) & 0xFF == ord('q'):
+        #     break

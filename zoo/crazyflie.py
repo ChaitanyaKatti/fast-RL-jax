@@ -71,10 +71,10 @@ class CrazyflieState(EnvState):
 class CrazyflieEnv(Env):
     @classmethod
     def reset(cls, key: jnp.ndarray, params: CrazyflieParams):
-        pos_rand_mag = 0.8*params.pos_threshold             # Random position magnitude for initial state
-        quat_rand_mag = 0*jnp.array([0.0, 0.1, 0.1, 0.1]) # Small random quaternion for initial state
-        vel_rand_mag = 0*jnp.array([0.1, 0.1, 0.1])       # Small random velocity for initial state
-        ang_vel_rand_mag = 0*jnp.array([0.1, 0.1, 0.1])   # Small random angular velocity for initial state
+        pos_rand_mag = 0.5*params.pos_threshold           # Random position magnitude for initial state
+        quat_rand_mag = jnp.array([0.0, 0.2, 0.2, 1.0]) # Small random quaternion for initial state
+        vel_rand_mag = jnp.array([0.1, 0.1, 0.1])       # Small random velocity for initial state
+        ang_vel_rand_mag = jnp.array([0.1, 0.1, 0.1])   # Small random angular velocity for initial state
 
         key1, key2, key3, key4 = random.split(key, 4)
         pos = random.uniform(key1, (params.num_agents, 3), minval=-pos_rand_mag, maxval=pos_rand_mag)
@@ -239,16 +239,17 @@ class CrazyflieEnv(Env):
 
         return state.replace(
             last_action=last_action,    # Revert to the last action at the begining of the substeps
-        )    
+        )
 
     @staticmethod
     def reward(state: CrazyflieState, params: CrazyflieParams) -> jnp.ndarray:
         return jnp.clip(
             1.0                                                                         # Reward to stay alive
             - jnp.linalg.norm(state.pos, axis=-1)                                       # Reward based on distance to origin
-            - 0.1*jnp.linalg.norm(state.current_action - state.last_action, axis=-1),    # Reward for smooth actions 
+            + 0.5*jnp.matmul(state.rot_mat[:, :, 0], jnp.array([1.0, 0.0, 0.0]))        # Reward for keeping the drone facing upwards
+            - 0.1*jnp.linalg.norm(state.current_action - state.last_action, axis=-1),   # Reward for smooth actions
             -1.0, 1.0
-        )
+        ) * params.ctrl_dt
 
     @staticmethod
     def terminated(state: CrazyflieState, params: CrazyflieParams) -> jnp.ndarray:
@@ -272,7 +273,7 @@ class CrazyflieEnv(Env):
             if renderer.should_close():
                 print("Closing renderer...")
                 renderer.cleanup()
-
+                return False
             else:
                 position = np.array(state.pos[0])
                 rotation = np.array(state.rot_mat[0])
@@ -287,6 +288,7 @@ class CrazyflieEnv(Env):
                     'Time': np.round(state.t[0], 2),
                 }
                 renderer.render(position, rotation, state.t[0], debug_info)
+                return True
         return render
 
     @staticmethod
@@ -303,15 +305,15 @@ class CrazyflieEnv(Env):
         arm_length: float = 0.045, # 4.5cm
         g: float = 9.8,
         PWM_MAX: int = 65535,
-        rate_center=0.2*jnp.array([200.0, 200.0, 200.0]),
-        rate_max=0.2*jnp.array([670.0, 670.0, 670.0]),
+        rate_center=0.1*jnp.array([200.0, 200.0, 200.0]),
+        rate_max=0.1*jnp.array([670.0, 670.0, 670.0]),
         rate_expo=jnp.array([0.54, 0.54, 0.54]),
         P_GAIN=jnp.array([1800, 1800, 2800]),
         I_GAIN=jnp.array([1200, 1200, 2400]),
         ERROR_SUM_MAX=jnp.array([0.1, 0.1, 0.05]),
-        thurst_coeff_a: float = 2.130295e-11,
-        thurst_coeff_b: float = 1.032633e-6,
-        thurst_coeff_c: float = 5.484560e-4,
+        thurst_coeff_a: float = 0.7*2.130295e-11,
+        thurst_coeff_b: float = 0.7*1.032633e-6,
+        thurst_coeff_c: float = 0.7*5.484560e-4,
         rotor_velocity_coeff_a: float = 0.04076521,
         rotor_velocity_coeff_b: float = 380.8359,
         torque_coeff: float = 0.005964552,

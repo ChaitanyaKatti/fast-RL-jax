@@ -62,7 +62,7 @@ class MultivariateNormalDiag(Distribution):
     
     def log_prob(self, value):
         k = self.event_shape[0]
-        diff = (value - self.loc) / self.scale_diag
+        diff = (value - self.loc) / (self.scale_diag + 1e-8)
         return (
             -0.5 * k * jnp.log(2 * jnp.pi)
             - jnp.sum(jnp.log(self.scale_diag), axis=-1)

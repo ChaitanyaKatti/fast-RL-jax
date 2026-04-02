@@ -1,17 +1,19 @@
+import time
+import os
 from rl import ppo
 
-# from rl import ActorCritic as Agent
-from rl import CNNActorCritic as Agent
+from rl import ActorCritic as Agent
+# from rl import CNNActorCritic as Agent
 
-# from zoo import CartPoleEnv as Env
+from zoo import CartPoleEnv as Env
 # from zoo import Copter2DEnv as Env
 # from zoo import CrazyflieEnv as Env
-from zoo import MazeEnv as Env
+# from zoo import MazeEnv as Env
 
-# from hyperparams import cartpole as hyperparams
+from hyperparams import cartpole as hyperparams
 # from hyperparams import copter2d as hyperparams
 # from hyperparams import crazyflie as hyperparams
-from hyperparams import maze as hyperparams
+# from hyperparams import maze as hyperparams
 
 import jax
 import jax.numpy as jnp
@@ -24,7 +26,7 @@ jax.config.update("jax_debug_nans", True)
 jax.default_device(jax.devices('cuda')[0])
 colorama.init(autoreset=True)
 
-def test(network_params, max_frames=500):
+def test(network_params, max_frames=1000):
     cpu = jax.devices('cpu')[0]
     jax.default_device(cpu)
     network_params = jax.tree.map(lambda x: jax.device_put(x, cpu), network_params)
@@ -65,18 +67,19 @@ def test(network_params, max_frames=500):
 
         # Render
         if not renderer(state, params=test_env_params):
-                print("Exiting render loop.")
-                break
+            print("Exiting render loop.")
+            break
 
 
 if __name__ == "__main__":
+    os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'  # Disable preallocation to show actual memory usage
+
     env = Env()
     env_params = env.make_params(**hyperparams['env_params'])
     ppo_params = ppo.make_params(**hyperparams['ppo_params'])
 
-    rng = jax.random.PRNGKey(0)
-    train = jax.jit(ppo.make_train(Agent, env, env_params, ppo_params))
-    out = train(rng)
+    out = ppo.train(Agent, env, env_params, ppo_params, seed=42, jit=True)
+
     network_params = out['train_state'].params
 
     print("Training complete. Testing the agent...")

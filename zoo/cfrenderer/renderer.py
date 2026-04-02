@@ -7,7 +7,7 @@ from OpenGL.GL import *
 from .shaders import simple_shader, text_shader
 from .camera import OrbitCamera
 from .model import ColladaModel
-
+import os
 
 class DroneRenderer:
     def __init__(self, width=800, height=600):
@@ -160,12 +160,13 @@ class DroneRenderer:
         glBindVertexArray(0)
 
         # Collada model for the drone
-        self.drone_model = ColladaModel("renderer/models/cf2_assembly.dae")
-        self.prop_1 = ColladaModel("renderer/models/ccw_prop.dae")
-        self.prop_2 = ColladaModel("renderer/models/cw_prop.dae")
-        self.prop_3 = ColladaModel("renderer/models/ccw_prop.dae")
-        self.prop_4 = ColladaModel("renderer/models/cw_prop.dae")
-        
+        model_path = os.path.join(os.path.dirname(__file__), "models")
+        self.drone_model = ColladaModel(os.path.join(model_path, "cf2_assembly.dae"))
+        self.prop_1 = ColladaModel(os.path.join(model_path, "ccw_prop.dae"))
+        self.prop_2 = ColladaModel(os.path.join(model_path, "cw_prop.dae"))
+        self.prop_3 = ColladaModel(os.path.join(model_path, "ccw_prop.dae"))
+        self.prop_4 = ColladaModel(os.path.join(model_path, "cw_prop.dae"))
+
         # Set OpenGL state
         glEnable(GL_DEPTH_TEST)
         glLineWidth(2.0)
@@ -242,7 +243,7 @@ class DroneRenderer:
         self.drone_model.render(axis_model_matrix, view_matrix, projection_matrix, self.camera.position)
         # Draw propellers
         propeller_positions = np.array([
-            [ 0.31, -0.31, 0.06], # Motor 1 
+            [ 0.31, -0.31, 0.06], # Motor 1
             [-0.31, -0.31, 0.06], # Motor 2
             [-0.31,  0.31, 0.06], # Motor 3
             [ 0.31,  0.31, 0.06], # Motor 4
@@ -260,7 +261,7 @@ class DroneRenderer:
             prop_model_matrix[:3, :3] = rot.T
             prop_model_matrix[:3, 3] = position + np.array(pos)
             model.render(prop_model_matrix, view_matrix, projection_matrix, self.camera.position)
-            
+
         # Draw FPS text
         fps_text = f"FPS: {self.fps:.1f}"
         self.render_text(fps_text, -self.width / 2 + 10, self.height / 2 - 30)
@@ -268,16 +269,15 @@ class DroneRenderer:
         # Draw time text
         time_text = f"Time: {time:.2f}s"
         self.render_text(time_text, -self.width / 2 + 10, self.height / 2 - 60)
-        
+
         # Print variable dict debug info on right side
-        np.printoptions(precision=2, suppress=True)
         if debug_info:
             y_offset = 30
             for key, value in debug_info.items():
                 info_text = f"{key}: {value}"
                 self.render_text(info_text, -self.width / 2 + 10, -self.height / 2 + y_offset)
                 y_offset += 30
-        
+
         glfw.swap_buffers(self.window)
         glfw.poll_events()
 
