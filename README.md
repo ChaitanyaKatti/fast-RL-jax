@@ -19,6 +19,32 @@ This project implements PPO from scratch using JAX for high-performance vectoriz
 ### Copter2D Environment Animation
 ![CartPole Animation](./misc/copter2d_animation.gif)
 
+## Usage
+
+### Training
+
+```python
+from rl import ppo, ActorCritic
+from zoo import CartPoleEnv
+
+# Initialize environment and parameters
+env = CartPoleEnv()
+env_params = env.make_params(num_agents=1024, num_steps=100)
+
+# Configure PPO parameters
+ppo_params = ppo.make_params(
+    LR=3e-4,
+    TOTAL_TIMESTEPS=100_000_000,
+    NUM_AGENTS=1024,
+    NUM_STEPS=100,
+    EPOCHS=4,
+    ENT_COEF=0.05
+)
+
+# Train
+out = ppo.train(ActorCritic, env, env_params, ppo_params, seed=42, jit=True)
+```
+
 
 ## Mathematical Foundation
 
@@ -99,11 +125,6 @@ class ActorCritic(nn.Module):
         return distribution, value
 ```
 
-**Architecture features:**
-- **Separate networks**: Actor and critic have independent hidden layers
-- **Orthogonal initialization**: Uses orthogonal weight initialization for stable training
-- **State-independent std**: Log standard deviation is a learnable parameter, not state-dependent
-
 ## Probability Distributions
 
 ### 1. Multivariate Normal Distribution
@@ -167,54 +188,17 @@ log π(a|s) = (α-1)log(a) + (β-1)log(1-a) - B(α,β)
 | `ENT_COEF` | Entropy coefficient | 0.01 |
 | `VF_COEF` | Value function coefficient | 0.5 |
 
-
-## Usage
-
-### Training
-
-```python
-# Initialize environment and parameters
-env = CartPoleEnv()
-env_params = env.make_params(num_agents=1024, num_steps=100)
-
-# Configure PPO parameters
-ppo_params = ppo.make_params(
-    LR=3e-4,
-    TOTAL_TIMESTEPS=100_000_000,
-    NUM_AGENTS=1024,
-    NUM_STEPS=100,
-    EPOCHS=4,
-    ENT_COEF=0.05
-)
-
-# Create and train
-network = ActorCritic(action_dim=env.action_space(env_params)[0].shape[0])
-train_fn = jax.jit(ppo.make_train(network, env, env_params, ppo_params))
-result = train_fn(jax.random.PRNGKey(0))
-```
-
 ## Key Features
 
-### Performance Optimizations
-
 - **JAX JIT compilation**: All training loops are JIT-compiled for speed
-- **Vectorized environments**: Efficient parallel environment execution
-- **Scan operations**: Use `jax.lax.scan` for efficient sequential operations
-
-### Debugging and Monitoring
-
+- **Functional Code**: Pure functions written for JAX compatibility
+- **Vectorized environments**: Scalable parallel environment execution
 - **Real-time metrics**: Episode rewards, losses, and entropy tracking
-- **Colored output**: Clear visual feedback during training
-
 
 ## Future Extensions
 
 - [x] Privileged learning support for asymmetric actor-critic
 - [ ] Additional distribution types (e.g., mixture models)
-- [ ] Adaptive clipping parameters
-- [ ] Reward Constrained Policy Optimization (RCPO) integration
-- [ ] Crazyflie drone control example
-- [ ] Equivariant Reinforcement Learning for Quadrotor UAV 
 
 ## References
 - [PPO Paper](https://arxiv.org/abs/1707.06347)
